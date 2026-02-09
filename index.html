@@ -835,12 +835,8 @@
                                     const displayLoss = Number(summary.totalLoss).toLocaleString();
                                     
                                     let sortedPlan = [...plan];
-                                    // Manual result shouldn't be re-sorted drastically, but default logic is fine
-                                    sortedPlan.sort((a, b) => {
-                                        if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
-                                        if (resultTab === 'min_rows') return b.qty - a.qty;
-                                        return a.remainder - b.remainder;
-                                    });
+                                    // Descending order of stockLength within each spec
+                                    sortedPlan.sort((a, b) => b.stockLength - a.stockLength);
 
                                     return (
                                         <div key={specKey || idx} className="break-before-page">
@@ -1297,7 +1293,12 @@
                 let seq = 1;
                 const stockSummary = {};
                 const merges = [];
-                const rowSpecs = {}; 
+                
+                // Separate spec mapping for each parallel table to prevent color bleeding
+                const mainRowSpecs = {}; 
+                const rawRowSpecs = {};
+                const prodRowSpecs = {};
+
                 let grandTotalStockQty = 0; let grandTotalCutQty = 0; let grandTotalLoss = 0;
                 merges.push({ s: {r:0, c:0}, e: {r:0, c:12} }); merges.push({ s: {r:2, c:0}, e: {r:2, c:12} });
 
@@ -1308,21 +1309,14 @@
                     const { plan } = results[specKey];
                     let w="?", h="?", t="?";
                     try { const dims = specKey.split(' ')[0] || ""; const thick = specKey.split(' ')[1] || ""; if (dims.includes('*')) [w, h] = dims.split('*'); else if (dims.includes('x')) [w, h] = dims.split('x'); t = thick.replace('T', ''); } catch(e){}
-                    const isStandard = (w == '100' && h == '100');
+                    const isStandard = (parseInt(w) == 100 && parseInt(h) == 100);
                     const unitWeight = getUnitWeight(w, h, t);
                     const statKey = `${t}|${w}|${h}`;
                     if (!statsMap[statKey]) { statsMap[statKey] = { t, w, h, inputLen: 0, inputWt: 0, prodLen: 0, prodWt: 0 }; }
 
+                    // Sort plan by stockLength descending within each spec
                     let sortedPlan = [...plan];
-                    if (mode === 'manual' || mode === 'manual_result') {
-                         sortedPlan.sort((a,b) => b.stockLength - a.stockLength); 
-                    } else {
-                        sortedPlan.sort((a, b) => {
-                            if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
-                            if (mode === 'min_rows') return b.qty - a.qty;
-                            return a.remainder - b.remainder;
-                        });
-                    }
+                    sortedPlan.sort((a, b) => b.stockLength - a.stockLength);
 
                     sortedPlan.forEach(group => {
                         grandTotalStockQty += Number(group.qty || 0);
@@ -1338,7 +1332,7 @@
                         const groupStartRow = wsData.length;
                         const rowHeight = Math.max(1, (group.parts || []).length);
                         for(let k=0; k < rowHeight; k++) {
-                            rowSpecs[groupStartRow + k] = isStandard ? 'std' : 'non_std';
+                            mainRowSpecs[groupStartRow + k] = isStandard ? 'std' : 'non_std';
                         }
 
                         (group.parts || []).forEach((part, pIdx) => {
@@ -1424,15 +1418,25 @@
                 const rawHeaders = ['두께', '장변', '단변', '길이', '수량'];
                 rawHeaders.forEach((h,i) => wsData[rawStartRow+1][i] = h);
                 
-                const sortedStockKeys = Object.keys(stockSummary).sort();
+                const sortedStockKeys = Object.keys(stockSummary).sort((a,b) => {
+                    const [t1, w1, h1, l1] = a.split('|').map(Number);
+                    const [t2, w2, h2, l2] = b.split('|').map(Number);
+                    if (w1 !== w2) return w2 - w1;
+                    if (h1 !== h2) return h2 - h1;
+                    if (t1 !== t2) return t2 - t1;
+                    return l2 - l1; // Length Desc
+                });
+
                 let rawTotalQtyCalc = 0;
                 sortedStockKeys.forEach((key, idx) => {
                     const [t, w, h, l] = key.split('|');
                     const qty = stockSummary[key];
+                    const isStandard = (parseInt(w) == 100 && parseInt(h) == 100);
                     rawTotalQtyCalc += qty;
                     const r = rawStartRow + 2 + idx;
                     if(!wsData[r]) wsData[r] = [];
                     wsData[r][0]=t; wsData[r][1]=w; wsData[r][2]=h; wsData[r][3]=parseFloat(l); wsData[r][4]=stockSummary[key];
+                    rawRowSpecs[r] = isStandard ? 'std' : 'non_std';
                 });
 
                 const rawEndRow = rawStartRow + 2 + sortedStockKeys.length;
@@ -1451,9 +1455,9 @@
                     const isB100 = (b.w == 100 && b.h == 100);
                     if (isA100 && !isB100) return -1;
                     if (!isA100 && isB100) return 1;
-                    if (a.t !== b.t) return b.t - a.t;
                     if (a.w !== b.w) return b.w - a.w;
                     if (a.h !== b.h) return b.h - a.h;
+                    if (a.t !== b.t) return b.t - a.t;
                     if (b.length !== a.length) return b.length - a.length;
                     return String(a.marking).localeCompare(String(b.marking));
                 });
@@ -1464,8 +1468,10 @@
                 sortedParts.forEach((p, idx) => {
                     const r = markRowIdx + idx;
                     prodTotalQtyCalc += p.qty;
+                    const isStandard = (parseInt(p.w) == 100 && parseInt(p.h) == 100);
                     if(!wsData[r]) wsData[r] = [];
                     wsData[r][6]=p.t; wsData[r][7]=p.w; wsData[r][8]=p.h; wsData[r][9]=p.length; wsData[r][10]=p.qty; wsData[r][11]=p.marking;
+                    prodRowSpecs[r] = isStandard ? 'std' : 'non_std';
                 });
                 
                 const prodEndRow = markRowIdx + sortedParts.length;
@@ -1478,28 +1484,28 @@
 
                 // --- 3. Set Column Widths ---
                 sheet['!cols'] = [
-                    { wch: 6 },  // A (순번)
-                    { wch: 6 },  // B (두께)
-                    { wch: 6 },  // C (장변)
-                    { wch: 6 },  // D (단변)
-                    { wch: 10 }, // E (원본길이)
+                    { wch: 7 },  // A (순번)
+                    { wch: 7 },  // B (두께)
+                    { wch: 7 },  // C (장변)
+                    { wch: 7 },  // D (단변)
+                    { wch: 12 }, // E (원본길이)
                     { wch: 8 },  // F (수량)
-                    { wch: 10 }, // G (컷팅길이)
+                    { wch: 12 }, // G (컷팅길이)
                     { wch: 8 },  // H (컷팅수)
                     { wch: 8 },  // I (수량)
-                    { wch: 20 }, // J (마킹)
-                    { wch: 10 }, // K (본당LOSS)
-                    { wch: 12 }, // L (총LOSS)
-                    { wch: 10 }, // M (비고)
+                    { wch: 22 }, // J (마킹)
+                    { wch: 12 }, // K (본당LOSS)
+                    { wch: 14 }, // L (총LOSS)
+                    { wch: 12 }, // M (비고)
                     { wch: 5 },  // N (Empty)
                     { wch: 5 },  // O (Empty)
                     { wch: 5 },  // P (Empty)
-                    { wch: 18 }, // Q (집계표: 규격)
-                    { wch: 15 }, // R (집계표: 투입 길이)
-                    { wch: 15 }, // S (집계표: 생산 길이)
-                    { wch: 15 }, // T (집계표: 투입 중량)
-                    { wch: 15 }, // U (집계표: 생산 중량)
-                    { wch: 15 }  // V (집계표: LOSS 중량)
+                    { wch: 20 }, // Q (집계표: 규격)
+                    { wch: 18 }, // R (집계표: 투입 길이)
+                    { wch: 18 }, // S (집계표: 생산 길이)
+                    { wch: 18 }, // T (집계표: 투입 중량)
+                    { wch: 18 }, // U (집계표: 생산 중량)
+                    { wch: 18 }  // V (집계표: LOSS 중량)
                 ];
                 
                 const range = XLSX.utils.decode_range(sheet['!ref']);
@@ -1517,6 +1523,15 @@
                         if (!isMainTable && !isRawTable && !isProdTable && !isStatsTable) {
                              s.border = {}; 
                         } else {
+                            // Apply background colors per table strictly
+                            if (isMainTable && mainRowSpecs[R] === 'non_std') {
+                                s.fill = { fgColor: { rgb: "FFF2CC" } };
+                            } else if (isRawTable && rawRowSpecs[R] === 'non_std') {
+                                s.fill = { fgColor: { rgb: "FFF2CC" } };
+                            } else if (isProdTable && prodRowSpecs[R] === 'non_std') {
+                                s.fill = { fgColor: { rgb: "FFF2CC" } };
+                            }
+
                             if (isMainTable) {
                                 if (R === 0) s = TITLE_STYLE;
                                 else if (R === 2) { 
@@ -1526,9 +1541,6 @@
                                 else if (R === 4) s = AUTO_HEADER_STYLE;
                                 else if (R === totalRowIdx) s = AUTO_TOTAL_STYLE;
                                 else if (R >= 5 && R < totalRowIdx) {
-                                    if (rowSpecs[R] === 'non_std') s = AUTO_NON_STD_STYLE;
-                                    else if (rowSpecs[R] === 'other_spec') s = AUTO_OTHER_SPEC_STYLE;
-
                                     if (C === 10) { 
                                         const cellVal = sheet[cellRef].v;
                                         if (typeof cellVal === 'number' && cellVal >= 650) s = AUTO_WARNING_STYLE;
