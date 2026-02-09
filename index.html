@@ -1475,6 +1475,32 @@
 
                 const sheet = XLSX.utils.aoa_to_sheet(wsData);
                 sheet['!merges'] = merges;
+
+                // --- 3. Set Column Widths ---
+                sheet['!cols'] = [
+                    { wch: 6 },  // A (순번)
+                    { wch: 6 },  // B (두께)
+                    { wch: 6 },  // C (장변)
+                    { wch: 6 },  // D (단변)
+                    { wch: 10 }, // E (원본길이)
+                    { wch: 8 },  // F (수량)
+                    { wch: 10 }, // G (컷팅길이)
+                    { wch: 8 },  // H (컷팅수)
+                    { wch: 8 },  // I (수량)
+                    { wch: 20 }, // J (마킹)
+                    { wch: 10 }, // K (본당LOSS)
+                    { wch: 12 }, // L (총LOSS)
+                    { wch: 10 }, // M (비고)
+                    { wch: 5 },  // N (Empty)
+                    { wch: 5 },  // O (Empty)
+                    { wch: 5 },  // P (Empty)
+                    { wch: 18 }, // Q (집계표: 규격)
+                    { wch: 15 }, // R (집계표: 투입 길이)
+                    { wch: 15 }, // S (집계표: 생산 길이)
+                    { wch: 15 }, // T (집계표: 투입 중량)
+                    { wch: 15 }, // U (집계표: 생산 중량)
+                    { wch: 15 }  // V (집계표: LOSS 중량)
+                ];
                 
                 const range = XLSX.utils.decode_range(sheet['!ref']);
                 for(let R = range.s.r; R <= range.e.r; ++R) {
