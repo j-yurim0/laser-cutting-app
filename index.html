@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스마트 컷팅 플랜 (Smart CP) - 길이 정렬 패치</title>
+    <title>스마트 컷팅 플랜 (Smart CP) - Ver 10.6.1 (Manual Fixed)</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     
+    <!-- Excel JS Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     
+    <!-- React & Babel -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -22,21 +24,21 @@
         
         @media print {
             @page { 
-                size: A4 portrait; 
+                size: A4 landscape; 
                 margin: 5mm; 
             }
             body { 
                 background: white; 
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                zoom: 0.9;
+                zoom: 0.8;
             }
             .print\:hidden { display: none !important; }
             .print\:p-0 { padding: 0 !important; }
             .print\:text-xs { font-size: 10px !important; }
             
             table { width: 100% !important; border-collapse: collapse; page-break-inside: auto; }
-            th, td { border: 1px solid #9ca3af !important; padding: 4px 2px !important; white-space: nowrap; }
+            th, td { border: 1px solid #9ca3af !important; padding: 2px !important; white-space: nowrap; }
             tr { page-break-inside: avoid; page-break-after: auto; }
             .break-before-page { page-break-before: always; }
             
@@ -51,6 +53,12 @@
         
         .modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .input-cell { width: 100%; height: 100%; border: none; background: transparent; text-align: center; outline: none; }
+        .input-cell:focus { background-color: #e0f2fe; font-weight: bold; }
+        
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900">
@@ -58,20 +66,13 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, deleteDoc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-        window.FirebaseSDK = {
-            initializeApp,
-            getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken,
-            getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, doc, deleteDoc, setDoc, getDoc
-        };
-
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        window.FirebaseSDK = { initializeApp, getAuth, signInAnonymously };
         window.dispatchEvent(new Event('firebase-sdk-ready'));
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef, memo, useCallback } = React;
+        const { useState, useEffect, useRef, memo, useCallback, useMemo } = React;
 
         // --- Icons ---
         const IconWrapper = ({ children, size = 20, className = "" }) => (
@@ -80,74 +81,123 @@
             </svg>
         );
         const Trash2 = (props) => <IconWrapper {...props}><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></IconWrapper>;
-        const Save = (props) => <IconWrapper {...props}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></IconWrapper>;
         const Plus = (props) => <IconWrapper {...props}><path d="M5 12h14"/><path d="M12 5v14"/></IconWrapper>;
         const Calculator = (props) => <IconWrapper {...props}><rect width="16" height="20" x="4" y="2" rx="2"/><line x1="8" x2="16" y1="6" y2="6"/><line x1="16" x2="16" y1="14" y2="18"/><path d="M16 10h.01"/><path d="M12 10h.01"/><path d="M8 10h.01"/><path d="M12 14h.01"/><path d="M8 14h.01"/><path d="M12 18h.01"/><path d="M8 18h.01"/></IconWrapper>;
         const Settings = (props) => <IconWrapper {...props}><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.09a2 2 0 0 1-1-1.74v-.47a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></IconWrapper>;
-        const Database = (props) => <IconWrapper {...props}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></IconWrapper>;
         const FileSpreadsheet = (props) => <IconWrapper {...props}><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></IconWrapper>;
         const FileDown = (props) => <IconWrapper {...props}><path d="M4 22h14a2 2 0 0 0 2-2V7.5L14.5 2H6a2 2 0 0 0-2 2v4"/><polyline points="14 2 14 8 20 8"/><path d="M2 15h10"/><path d="M9 18l3-3-3-3"/></IconWrapper>;
         const Building = (props) => <IconWrapper {...props}><rect x="4" y="2" width="16" height="20" rx="2" ry="2" /><path d="M9 22v-4h6v4" /><path d="M8 6h.01" /><path d="M16 6h.01" /><path d="M8 10h.01" /><path d="M16 10h.01" /><path d="M8 14h.01" /><path d="M16 14h.01" /><path d="M8 18h.01" /><path d="M16 18h.01" /></IconWrapper>;
         const Layers = (props) => <IconWrapper {...props}><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></IconWrapper>;
         const X = (props) => <IconWrapper {...props}><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></IconWrapper>;
         const Check = (props) => <IconWrapper {...props}><polyline points="20 6 9 17 4 12"></polyline></IconWrapper>;
+        const Edit3 = (props) => <IconWrapper {...props}><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></IconWrapper>;
+        const EyeOff = (props) => <IconWrapper {...props}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconWrapper>;
+        const Eye = (props) => <IconWrapper {...props}><path d="M1 12s4-8 11-8 11 8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></IconWrapper>;
+        const Copy = (props) => <IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></IconWrapper>;
 
         // --- Constants ---
         const UNIT_WEIGHT_DATA = {
-            "100-100-3.2": 9.52,
-            "100-100-3.0": 8.96,
-            "100-100-2.3": 6.95,
-            "100-100-2.1": 6.37,
-            "100-50-2.1": 4.72,
-            "75-75-2.1": 4.72,
-            "50-50-2.1": 3.07
+            "100-100-3.2": 9.52, "100-100-3.0": 8.96, "100-100-2.3": 6.95, "100-100-2.1": 6.37,
+            "100-50-2.1": 4.72, "75-75-2.1": 4.72, "50-50-2.1": 3.07
         };
 
         const STANDARD_STOCKS = {
             "default": [6000, 6600, 7200, 8000],
-            "100x100": { 
-                "2.1": [6000, 6600, 7200, 8000], 
-                "2.3": [6000, 6600, 7200, 8000], 
-                "3.0": [6000, 6200, 7200, 8000], 
-                "3.2": [6000, 6200, 7200, 8000] 
-            },
-            "75x75": { 
-                "2.1": [6000, 6600, 7200, 8000], 
-                "2.3": [6000, 6600, 7200, 8000], 
-                "3.0": [6000, 6200, 7200, 8000], 
-                "3.2": [6000, 6200, 7200, 8000] 
-            },
-            "100x50": { 
-                "2.1": [6000, 6600, 7200, 8200],
-                "2.3": [6000, 6600, 7200, 8200],
-                "3.0": [6000, 6600, 7200, 8200],
-                "3.2": [6000, 6600, 7200, 8200] 
-            },
-            "50x50": { 
-                "2.1": [6000],
-                "2.3": [6000],
-                "3.0": [6000],
-                "3.2": [6000]
-            }
+            "100x100": { "2.1": [6000, 6600, 7200, 8000], "2.3": [6000, 6600, 7200, 8000], "3.0": [6000, 6200, 7200, 8000], "3.2": [6000, 6200, 7200, 8000] },
+            "75x75": { "2.1": [6000, 6600, 7200, 8000], "2.3": [6000, 6600, 7200, 8000], "3.0": [6000, 6200, 7200, 8000], "3.2": [6000, 6200, 7200, 8000] },
+            "100x50": { "2.1": [6000, 6600, 7200, 8200], "2.3": [6000, 6600, 7200, 8200], "3.0": [6000, 6600, 7200, 8200], "3.2": [6000, 6600, 7200, 8200] },
+            "50x50": { "2.1": [6000], "2.3": [6000], "3.0": [6000], "3.2": [6000] }
         };
 
-        // --- Sidebar (Memoized) ---
-        const Sidebar = memo(({ viewMode, setViewMode, projectInfo, setProjectInfo }) => {
-            const handleTextChange = useCallback((e, field) => {
-                setProjectInfo(prev => ({...prev, [field]: e.target.value}));
-            }, [setProjectInfo]);
+        const getUnitWeight = (w, h, t) => { 
+            const dims = [parseInt(w), parseInt(h)].sort((a,b)=>b-a); 
+            const key = `${dims[0]}-${dims[1]}-${t}`; 
+            return UNIT_WEIGHT_DATA[key] || 0; 
+        };
 
-            const handleCheckChange = useCallback((e, field) => {
-                setProjectInfo(prev => ({...prev, [field]: e.target.checked}));
-            }, [setProjectInfo]);
+        // --- Helper Function: Parse Items from Grid ---
+        const parseItemsFromGrid = (gridData, colMapping, defaultSpec, defaultThickness) => { 
+            const lenIdx = Object.keys(colMapping).find(key => colMapping[key] === 'length'); 
+            const qtyIdx = Object.keys(colMapping).find(key => colMapping[key] === 'qty'); 
+            if (!lenIdx || !qtyIdx) return []; 
+            const wIdx = Object.keys(colMapping).find(key => colMapping[key] === 'width'); 
+            const hIdx = Object.keys(colMapping).find(key => colMapping[key] === 'height'); 
+            const tIdx = Object.keys(colMapping).find(key => colMapping[key] === 'thickness'); 
+            const markIdx = Object.keys(colMapping).find(key => colMapping[key] === 'marking'); 
+            let items = []; let rowCounter = 0; 
+            gridData.forEach((row) => { 
+                let rawLen = row[lenIdx]?.trim().replace(/,/g, ''); 
+                let rawQty = row[qtyIdx]?.trim().replace(/,/g, ''); 
+                if (!rawLen || !rawQty) return; 
+                let length = parseFloat(rawLen); 
+                const qty = parseInt(rawQty, 10); 
+                if (isNaN(length) || isNaN(qty) || qty <= 0) return; 
+                if (length < 20) length = Math.round(length * 1000); else length = Math.round(length); 
+                let w = wIdx ? row[wIdx]?.trim().replace(/[^0-9.]/g, '') : ''; 
+                let h = hIdx ? row[hIdx]?.trim().replace(/[^0-9.]/g, '') : ''; 
+                let t = tIdx ? row[tIdx]?.trim().replace(/[^0-9.]/g, '') : ''; 
+                let marking = markIdx ? (row[markIdx]?.trim() || '') : ''; 
+                if (!w) w = defaultSpec.split('*')[0] || '100'; 
+                if (!h) h = defaultSpec.split('*')[1] || '100'; 
+                if (!t) t = defaultThickness; 
+                const dims = [parseInt(w), parseInt(h)].sort((a,b)=>b-a); 
+                const specKey = `${dims[0]}*${dims[1]} ${t}T`; 
+                items.push({ id: rowCounter++, length, qty, marking, specKey, w: dims[0], h: dims[1], t: t }); 
+            }); 
+            return items; 
+        };
+
+        // --- Excel Export Modal ---
+        const ExcelExportModal = ({ isOpen, onClose, onConfirm, dongs }) => {
+            if (!isOpen) return null;
+            const [targetType, setTargetType] = useState('current');
+            const [modeType, setModeType] = useState('min_rows');
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-96 modal-fade-in relative">
+                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
+                        <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><FileDown className="text-green-600"/> 엑셀 다운로드</h3>
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 대상</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold flex items-center justify-center gap-2 transition ${targetType === 'current' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button>
+                                    <button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold flex items-center justify-center gap-2 transition ${targetType === 'all' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 버전</label>
+                                <div className="space-y-2">
+                                    <button onClick={() => setModeType('min_rows')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'min_rows' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                        <span>① 작업 편의 (Work Convenience)</span>{modeType === 'min_rows' && <Check size={16}/>}
+                                    </button>
+                                    <button onClick={() => setModeType('min_loss')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'min_loss' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                        <span>② LOSS 최소화 (자재 절약)</span>{modeType === 'min_loss' && <Check size={16}/>}
+                                    </button>
+                                    <button onClick={() => setModeType('manual_result')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'manual_result' ? 'border-purple-500 bg-purple-50 text-purple-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                        <span>③ 수동 작성 결과</span>{modeType === 'manual_result' && <Check size={16}/>}
+                                    </button>
+                                    <button onClick={() => setModeType('both')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'both' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                                        <span>④ 자동 계산 (작업+LOSS 둘 다)</span>{modeType === 'both' && <Check size={16}/>}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <button onClick={() => onConfirm(targetType, modeType)} className="w-full mt-8 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2"><FileDown size={18}/> 다운로드 시작</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const Sidebar = memo(({ viewMode, setViewMode, projectInfo, setProjectInfo }) => {
+            const handleTextChange = useCallback((e, field) => setProjectInfo(prev => ({...prev, [field]: e.target.value})), [setProjectInfo]);
+            const handleCheckChange = useCallback((e, field) => setProjectInfo(prev => ({...prev, [field]: e.target.checked})), [setProjectInfo]);
 
             return (
                 <div className="w-64 bg-white border-r border-gray-200 h-screen flex flex-col fixed left-0 top-0 z-30 print:hidden">
                     <div className="p-6 border-b">
-                        <h1 className="text-xl font-bold flex items-center gap-2 text-blue-700">
-                            <Calculator className="text-blue-600"/> Smart CP
-                        </h1>
-                        <p className="text-xs text-gray-400 mt-1">Ver 10.1.0 (Scoring System)</p>
+                        <h1 className="text-xl font-bold flex items-center gap-2 text-blue-700"><Calculator className="text-blue-600"/> Smart CP</h1>
+                        <p className="text-xs text-gray-400 mt-1">Ver 10.6.1 (Fixed)</p>
                     </div>
                     <div className="p-4 space-y-4 flex-1 overflow-y-auto">
                         <div className="space-y-2">
@@ -162,15 +212,14 @@
                         </div>
                         <div className="space-y-1">
                             <button onClick={()=>setViewMode('input')} className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${viewMode==='input' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><FileSpreadsheet size={16}/> 데이터 입력</button>
-                            <button onClick={()=>setViewMode('result')} className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${viewMode==='result' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><Calculator size={16}/> CP 결과 확인</button>
-                            <button onClick={()=>setViewMode('history')} className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${viewMode==='history' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><Database size={16}/> 저장 목록</button>
+                            <button onClick={()=>setViewMode('result')} className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${viewMode==='result' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><Calculator size={16}/> CP 자동 계산</button>
+                            <button onClick={()=>setViewMode('manual')} className={`w-full text-left px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${viewMode==='manual' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}><Edit3 size={16}/> CP 직접 작성</button>
                         </div>
                     </div>
                 </div>
             );
         });
 
-        // --- Dong Tabs ---
         const DongTabs = ({ dongs, currentDong, setCurrentDong, addDong, deleteDong, renameDong }) => (
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2 border-b items-center print:hidden">
                 {dongs.map(dong => (
@@ -187,12 +236,266 @@
             </div>
         );
 
+        // --- Manual CP View ---
+        const ManualCPView = ({ dongs, currentDong, setCurrentDong, addDong, deleteDong, renameDong, projectInfo, manualData, setManualData, parsedItems, onConvert }) => {
+            const rows = manualData[currentDong] || [];
+            const [hideEmpty, setHideEmpty] = useState(false);
+
+            const updateRows = (newRows) => {
+                setManualData(prev => ({...prev, [currentDong]: newRows}));
+            };
+
+            const addStockRow = () => {
+                const lastRow = rows.length > 0 ? rows[rows.length - 1] : { t:'2.1', w:'100', h:'100', l:6000, qty:1 };
+                const newRow = {
+                    id: Date.now(),
+                    t: lastRow.t, w: lastRow.w, h: lastRow.h, l: lastRow.l, qty: 1,
+                    cuts: Array(8).fill().map(() => ({ l: '', count: '', marking: '' }))
+                };
+                updateRows([...rows, newRow]);
+            };
+
+            const handleStockChange = (rIdx, field, val) => {
+                const newRows = [...rows];
+                newRows[rIdx] = { ...newRows[rIdx], [field]: val };
+                updateRows(newRows);
+            };
+
+            const handleCutChange = (rIdx, cIdx, field, val) => {
+                const newRows = [...rows];
+                const newCuts = [...newRows[rIdx].cuts];
+                newCuts[cIdx] = { ...newCuts[cIdx], [field]: val };
+                newRows[rIdx] = { ...newRows[rIdx], cuts: newCuts };
+                updateRows(newRows);
+            };
+
+            const removeStockRow = (rIdx) => {
+                if(confirm('이 원본 행을 삭제하시겠습니까?')) {
+                    const newRows = rows.filter((_, i) => i !== rIdx);
+                    updateRows(newRows);
+                }
+            };
+
+            const sortRowsByLength = () => {
+                const newRows = [...rows].sort((a, b) => {
+                    if (a.t !== b.t) return parseFloat(b.t) - parseFloat(a.t);
+                    if (a.w !== b.w) return parseFloat(b.w) - parseFloat(a.w);
+                    if (a.h !== b.h) return parseFloat(b.h) - parseFloat(a.h);
+                    return b.l - a.l;
+                });
+                updateRows(newRows);
+            };
+
+            const requiredItems = useMemo(() => {
+                const grouped = {};
+                (parsedItems || []).forEach(item => {
+                    const itemMarking = item.marking ? String(item.marking).trim() : '';
+                    const key = `${item.t}|${item.w}|${item.h}|${item.length}|${itemMarking}`;
+                    
+                    if(!grouped[key]) grouped[key] = { ...item, marking: itemMarking, required: 0, used: 0 };
+                    grouped[key].required += item.qty;
+                });
+                return Object.values(grouped).sort((a,b) => b.length - a.length);
+            }, [parsedItems]);
+
+            const remainingItems = useMemo(() => {
+                const status = JSON.parse(JSON.stringify(requiredItems));
+                
+                (rows || []).forEach(row => {
+                    if (Array.isArray(row.cuts)) {
+                        row.cuts.forEach(cut => {
+                            if(cut.l && cut.count) {
+                                const cutLen = parseFloat(cut.l);
+                                const totalCutCount = parseInt(cut.count) * parseInt(row.qty || 0);
+                                const cutMarking = cut.marking ? String(cut.marking).trim() : '';
+                                
+                                const match = status.find(item => 
+                                    Math.abs(item.length - cutLen) < 0.1 && 
+                                    (item.marking || '') === cutMarking &&
+                                    item.t == row.t && 
+                                    item.w == row.w && 
+                                    item.h == row.h
+                                );
+                                
+                                if(match) {
+                                    match.used += totalCutCount;
+                                }
+                            }
+                        });
+                    }
+                });
+                return status;
+            }, [requiredItems, rows]);
+
+            return (
+                <div className="animate-fade-in pb-20 flex gap-4 h-[calc(100vh-100px)]">
+                    {/* Left: Input Table */}
+                    <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                        <div className="p-3 border-b bg-gray-50 flex justify-between items-center shrink-0">
+                            <h2 className="font-bold flex items-center gap-2"><Edit3 size={18} className="text-blue-600"/> CP 직접 작성 ({currentDong})</h2>
+                            <div className="flex gap-2">
+                                <button onClick={() => setHideEmpty(!hideEmpty)} className={`px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1 border ${hideEmpty ? 'bg-blue-100 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-300'}`}>
+                                    {hideEmpty ? <EyeOff size={14}/> : <Eye size={14}/>} 빈칸 {hideEmpty ? '보이기' : '숨기기'}
+                                </button>
+                                <button onClick={sortRowsByLength} className="px-3 py-1.5 text-xs font-bold rounded bg-white border border-gray-300 text-gray-600 hover:bg-gray-50">길이순 정렬</button>
+                                <button onClick={() => onConvert(rows)} className="px-3 py-1.5 text-xs font-bold rounded bg-blue-600 text-white hover:bg-blue-700 flex items-center gap-1"><Copy size={14}/> 결과 확인 및 엑셀 저장</button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex-1 overflow-auto custom-scrollbar bg-white p-4">
+                            <DongTabs dongs={dongs} currentDong={currentDong} setCurrentDong={setCurrentDong} addDong={addDong} deleteDong={deleteDong} renameDong={renameDong} />
+                            
+                            <table className="w-full border-collapse text-xs text-center shadow-sm">
+                                <thead className="sticky top-0 z-10">
+                                    <tr className="bg-cyan-100 h-8 border-y border-gray-300 text-gray-700 font-bold">
+                                        <th className="border w-10">순번</th>
+                                        <th className="border w-12">두께</th>
+                                        <th className="border w-12">장변</th>
+                                        <th className="border w-12">단변</th>
+                                        <th className="border w-16">길이</th>
+                                        <th className="border w-12">수량</th>
+                                        <th className="border w-16 bg-blue-50">길이</th>
+                                        <th className="border w-12 bg-blue-50">컷팅수</th>
+                                        <th className="border w-12 bg-blue-50">수량</th>
+                                        <th className="border bg-blue-50">마킹</th>
+                                        <th className="border w-16">본당LOSS</th>
+                                        <th className="border w-20">총LOSS</th>
+                                        <th className="border w-12">비고</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(rows || []).map((row, rIdx) => {
+                                        let totalStockQtyRow = 0; let grandTotalLossRow = 0;
+                                        const cuts = Array.isArray(row.cuts) ? row.cuts : [];
+                                        const usedLength = cuts.reduce((acc, c) => acc + (parseFloat(c.l||0) * parseFloat(c.count||0)), 0);
+                                        const lossPerBar = row.l - usedLength;
+                                        const totalRowLoss = lossPerBar * row.qty;
+                                        
+                                        const visibleCuts = hideEmpty ? cuts.filter(c => c.l && c.count) : cuts;
+                                        const renderCuts = visibleCuts.length > 0 ? visibleCuts : (hideEmpty ? [] : cuts);
+                                        const rowSpan = Math.max(1, renderCuts.length);
+
+                                        return (
+                                            <React.Fragment key={row.id || rIdx}>
+                                                {renderCuts.map((cut, cIdx) => {
+                                                    const isFirst = cIdx === 0;
+                                                    const cutQty = (parseInt(cut.count) * parseInt(row.qty)) || '';
+
+                                                    return (
+                                                        <tr key={cIdx} className="border-b border-gray-200 hover:bg-gray-50 h-8">
+                                                            {isFirst && (
+                                                                <>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-100 font-bold relative group">
+                                                                        {rIdx + 1}
+                                                                        <button onClick={() => removeStockRow(rIdx)} className="absolute left-0 top-0 text-red-400 opacity-0 group-hover:opacity-100 p-0.5"><Trash2 size={10}/></button>
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input className="input-cell bg-yellow-50" value={row.t} onChange={e=>handleStockChange(rIdx, 't', e.target.value)} /></td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input className="input-cell bg-yellow-50" value={row.w} onChange={e=>handleStockChange(rIdx, 'w', e.target.value)} /></td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input className="input-cell bg-yellow-50" value={row.h} onChange={e=>handleStockChange(rIdx, 'h', e.target.value)} /></td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input type="number" className="input-cell bg-yellow-50 font-bold" value={row.l} onChange={e=>handleStockChange(rIdx, 'l', e.target.value)} /></td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input type="number" className="input-cell bg-yellow-50" value={row.qty} onChange={e=>handleStockChange(rIdx, 'qty', e.target.value)} /></td>
+                                                                </>
+                                                            )}
+                                                            
+                                                            <td className="border p-0"><input type="number" className="input-cell" value={cut.l} onChange={e=>handleCutChange(rIdx, cuts.indexOf(cut), 'l', e.target.value)} /></td>
+                                                            <td className="border p-0"><input type="number" className="input-cell" value={cut.count} onChange={e=>handleCutChange(rIdx, cuts.indexOf(cut), 'count', e.target.value)} /></td>
+                                                            <td className="border bg-gray-50 text-gray-500">{cutQty ? cutQty.toLocaleString() : ''}</td>
+                                                            <td className="border p-0"><input className="input-cell text-left px-1" value={cut.marking} onChange={e=>handleCutChange(rIdx, cuts.indexOf(cut), 'marking', e.target.value)} /></td>
+
+                                                            {isFirst && (
+                                                                <>
+                                                                    <td rowSpan={rowSpan} className={`border font-bold ${lossPerBar > 650 ? 'text-blue-600' : (lossPerBar < 0 ? 'text-red-500' : 'text-gray-700')}`}>{lossPerBar.toLocaleString()}</td>
+                                                                    <td rowSpan={rowSpan} className="border text-gray-600">{totalRowLoss.toLocaleString()}</td>
+                                                                    <td rowSpan={rowSpan} className="border"></td>
+                                                                </>
+                                                            )}
+                                                        </tr>
+                                                    );
+                                                })}
+                                                <tr className="h-1 bg-gray-100 border-t border-gray-300"><td colSpan="13"></td></tr>
+                                            </React.Fragment>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            
+                            <button onClick={addStockRow} className="w-full mt-4 py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-400 hover:border-blue-400 hover:text-blue-500 font-bold transition">
+                                + 원본 추가
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Right: Reference Panel */}
+                    <div className="w-80 flex flex-col gap-4">
+                        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                            <div className="p-2 bg-gray-800 text-white font-bold text-sm text-center">견적 물량 (필요 자재)</div>
+                            <div className="flex-1 overflow-auto custom-scrollbar p-2">
+                                <table className="w-full text-xs text-center border-collapse">
+                                    <thead className="sticky top-0 bg-white shadow-sm">
+                                        <tr className="bg-gray-100 border-b">
+                                            <th className="p-1">규격(T/W/H)</th>
+                                            <th className="p-1">길이</th>
+                                            <th className="p-1">수량</th>
+                                            <th className="p-1">마킹</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {requiredItems.map((item, i) => (
+                                            <tr key={i} className="border-b hover:bg-gray-50">
+                                                <td className="p-1">{item.t}/{item.w}/{item.h}</td>
+                                                <td className="p-1 font-bold">{item.length}</td>
+                                                <td className="p-1">{item.required}</td>
+                                                <td className="p-1 text-left truncate max-w-[80px]" title={item.marking}>{item.marking}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
+                            <div className="p-2 bg-blue-600 text-white font-bold text-sm text-center">남은 물량 (실시간)</div>
+                            <div className="flex-1 overflow-auto custom-scrollbar p-2">
+                                <table className="w-full text-xs text-center border-collapse">
+                                    <thead className="sticky top-0 bg-white shadow-sm">
+                                        <tr className="bg-blue-50 border-b border-blue-200">
+                                            <th className="p-1">규격(T/W/H)</th>
+                                            <th className="p-1">길이</th>
+                                            <th className="p-1">필요</th>
+                                            <th className="p-1">잔여</th>
+                                            <th className="p-1">마킹</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {remainingItems.map((item, i) => {
+                                            const remaining = item.required - item.used;
+                                            const isDone = remaining <= 0;
+                                            return (
+                                                <tr key={i} className={`border-b ${isDone ? 'bg-gray-100 text-gray-400' : 'hover:bg-blue-50'}`}>
+                                                    <td className="p-1">{item.t}/{item.w}/{item.h}</td>
+                                                    <td className="p-1 font-bold">{item.length}</td>
+                                                    <td className="p-1">{item.required}</td>
+                                                    <td className={`p-1 font-bold ${remaining < 0 ? 'text-red-500' : (remaining===0 ? 'text-green-500' : 'text-black')}`}>{remaining}</td>
+                                                    <td className="p-1 text-left truncate max-w-[60px]" title={item.marking}>{item.marking}</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         // --- Input View ---
         const InputView = ({ 
             currentDong, dongs, setCurrentDong, addDong, deleteDong, renameDong,
             data, updateCurrentData, activeTab, setActiveTab, customStocks, setCustomStocks,
             processGridData, handlePaste, runAllDongs, globalSettings,
-            isUserStockMode, setIsUserStockMode, userStockList, setUserStockList
+            isUserStockMode, setIsUserStockMode, userStockList, setUserStockList,
+            setViewMode, isCalculating 
         }) => {
             const [inputMode, setInputMode] = useState('sales');
             const [newStd, setNewStd] = useState({ w:'100', h:'100', t:'2.1', length: 6000, qty: 10 });
@@ -248,19 +551,26 @@
             };
 
             return (
-                <div className="animate-fade-in">
+                <div className="animate-fade-in relative">
+                    {isCalculating && (
+                        <div className="absolute inset-0 bg-white/80 z-50 flex flex-col items-center justify-center">
+                            <div className="loader mb-4"></div>
+                            <p className="text-blue-600 font-bold animate-pulse">최적의 컷팅 패턴을 계산 중입니다...</p>
+                        </div>
+                    )}
                     <div className="flex justify-between items-end mb-2">
                         <h2 className="text-lg font-bold text-gray-800">데이터 입력 ({currentDong})</h2>
                         <div className="flex gap-2">
                             <button onClick={runAllDongs} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-gray-900 flex gap-2 items-center transition"><Layers size={16}/> 전체 동 계산</button>
                             <button onClick={processGridData} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700 flex gap-2 items-center transition"><Calculator size={16}/> 현재 동 계산</button>
+                            <button onClick={() => setViewMode('manual')} className="bg-white border border-blue-600 text-blue-600 px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-50 flex gap-2 items-center transition"><Edit3 size={16}/> CP 직접 작성</button>
                         </div>
                     </div>
                     <DongTabs dongs={dongs} currentDong={currentDong} setCurrentDong={setCurrentDong} addDong={addDong} deleteDong={deleteDong} renameDong={renameDong} />
                     
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         <div className="lg:col-span-1 space-y-4">
-                             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
                                 <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2 text-sm"><Settings size={16}/> 입력 양식 선택</h3>
                                 <div className="flex bg-gray-100 p-1 rounded-lg">
                                     <button onClick={()=>setInputMode('sales')} className={`flex-1 py-2 text-xs font-bold rounded ${inputMode==='sales'?'bg-white shadow text-blue-600':'text-gray-500'}`}>영업 (기본)</button>
@@ -280,105 +590,100 @@
 
                                 {isUserStockMode ? (
                                     <div className="space-y-3">
-                                        {/* Standard Input Form */}
-                                        <div className="bg-blue-50 p-2 rounded border border-blue-100">
-                                            <div className="text-xs font-bold text-blue-700 mb-1">표준 자재 추가</div>
-                                            <div className="flex gap-1 mb-1">
-                                                <select className="flex-1 p-1 border rounded text-xs" value={`${newStd.w}*${newStd.h}|${newStd.t}`} onChange={e=>{
-                                                    const val = e.target.value; if(!val) return;
-                                                    const [dim, t] = val.split('|'); const parts = dim.replace('x','*').split('*');
-                                                    setNewStd({...newStd, w:parts[0], h:parts[1], t:t, length: getStandardLengthsForInput(parts[0],parts[1],t)[0] });
-                                                }}>
-                                                    {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
-                                                </select>
-                                                <select className="w-20 p-1 border rounded text-xs" value={newStd.length} onChange={e=>setNewStd({...newStd, length:+e.target.value})}>
-                                                    {getStandardLengthsForInput(newStd.w, newStd.h, newStd.t).map(l => <option key={l} value={l}>{l}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="flex gap-1">
-                                                <input type="number" className="flex-1 p-1 border rounded text-xs" placeholder="수량" value={newStd.qty} onChange={e=>setNewStd({...newStd, qty:+e.target.value})} />
-                                                <button onClick={()=>handleAddUserStock('std')} className="px-2 bg-blue-600 text-white rounded text-xs font-bold">+</button>
-                                            </div>
-                                        </div>
-                                        
-                                        {/* Remnant Input Form */}
-                                        <div className="bg-gray-50 p-2 rounded border border-gray-200">
-                                            <div className="text-xs font-bold text-gray-700 mb-1">잔재/기타 자재 추가</div>
-                                            <div className="flex gap-1 mb-1">
-                                                <select className="w-full p-1 border rounded text-xs" value={`${newRem.w}*${newRem.h}|${newRem.t}`} onChange={e=>{
-                                                    const val = e.target.value; if(!val) return;
-                                                    const [dim, t] = val.split('|'); const parts = dim.replace('x','*').split('*');
-                                                    setNewRem({...newRem, w:parts[0], h:parts[1], t:t });
-                                                }}>
-                                                    {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="flex gap-1">
-                                                <input type="number" className="flex-1 p-1 border rounded text-xs" placeholder="길이" value={newRem.length || ''} onChange={e=>setNewRem({...newRem, length:+e.target.value})} />
-                                                <input type="number" className="w-12 p-1 border rounded text-xs" placeholder="수량" value={newRem.qty} onChange={e=>setNewRem({...newRem, qty:+e.target.value})} />
-                                                <button onClick={()=>handleAddUserStock('rem')} className="px-2 bg-gray-600 text-white rounded text-xs font-bold">+</button>
-                                            </div>
-                                        </div>
-
-                                        {/* List */}
-                                        <div className="max-h-40 overflow-y-auto border-t pt-2 space-y-1">
-                                            {userStockList.length === 0 && <p className="text-xs text-gray-400 text-center">추가된 자재가 없습니다.</p>}
-                                            {userStockList.map(item => (
-                                                <div key={item.id} className="flex justify-between items-center text-xs bg-white p-1 rounded border">
-                                                    <span>{item.type==='std'?'🟦':'⬜'} {item.w}*{item.h} {item.t}T - <b>{item.length}</b> ({item.qty}본)</span>
-                                                    <button onClick={()=>setUserStockList(userStockList.filter(x=>x.id!==item.id))} className="text-red-500"><Trash2 size={12}/></button>
+                                            <div className="bg-blue-50 p-2 rounded border border-blue-100">
+                                                <div className="text-xs font-bold text-blue-700 mb-1">표준 자재 추가</div>
+                                                <div className="flex gap-1 mb-1">
+                                                    <select className="flex-1 p-1 border rounded text-xs" value={`${newStd.w}*${newStd.h}|${newStd.t}`} onChange={e=>{
+                                                        const val = e.target.value; if(!val) return;
+                                                        const [dim, t] = val.split('|'); const parts = dim.replace('x','*').split('*');
+                                                        setNewStd({...newStd, w:parts[0], h:parts[1], t:t, length: getStandardLengthsForInput(parts[0],parts[1],t)[0] });
+                                                    }}>
+                                                        {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
+                                                    </select>
+                                                    <select className="w-20 p-1 border rounded text-xs" value={newStd.length} onChange={e=>setNewStd({...newStd, length:+e.target.value})}>
+                                                        {getStandardLengthsForInput(newStd.w, newStd.h, newStd.t).map(l => <option key={l} value={l}>{l}</option>)}
+                                                    </select>
                                                 </div>
-                                            ))}
-                                        </div>
+                                                <div className="flex gap-1">
+                                                    <input type="number" className="flex-1 p-1 border rounded text-xs" placeholder="수량" value={newStd.qty} onChange={e=>setNewStd({...newStd, qty:+e.target.value})} />
+                                                    <button onClick={()=>handleAddUserStock('std')} className="px-2 bg-blue-600 text-white rounded text-xs font-bold">+</button>
+                                                </div>
+                                            </div>
+                                            <div className="bg-gray-50 p-2 rounded border border-gray-200">
+                                                <div className="text-xs font-bold text-gray-700 mb-1">잔재/기타 자재 추가</div>
+                                                <div className="flex gap-1 mb-1">
+                                                    <select className="w-full p-1 border rounded text-xs" value={`${newRem.w}*${newRem.h}|${newRem.t}`} onChange={e=>{
+                                                        const val = e.target.value; if(!val) return;
+                                                        const [dim, t] = val.split('|'); const parts = dim.replace('x','*').split('*');
+                                                        setNewRem({...newRem, w:parts[0], h:parts[1], t:t });
+                                                    }}>
+                                                        {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
+                                                    </select>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <input type="number" className="flex-1 p-1 border rounded text-xs" placeholder="길이" value={newRem.length || ''} onChange={e=>setNewRem({...newRem, length:+e.target.value})} />
+                                                    <input type="number" className="w-12 p-1 border rounded text-xs" placeholder="수량" value={newRem.qty} onChange={e=>setNewRem({...newRem, qty:+e.target.value})} />
+                                                    <button onClick={()=>handleAddUserStock('rem')} className="px-2 bg-gray-600 text-white rounded text-xs font-bold">+</button>
+                                                </div>
+                                            </div>
+                                            <div className="max-h-40 overflow-y-auto border-t pt-2 space-y-1">
+                                                {userStockList.length === 0 && <p className="text-xs text-gray-400 text-center">추가된 자재가 없습니다.</p>}
+                                                {userStockList.map(item => (
+                                                    <div key={item.id} className="flex justify-between items-center text-xs bg-white p-1 rounded border">
+                                                        <span>{item.type==='std'?'🟦':'⬜'} {item.w}*{item.h} {item.t}T - <b>{item.length}</b> ({item.qty}본)</span>
+                                                        <button onClick={()=>setUserStockList(userStockList.filter(x=>x.id!==item.id))} className="text-red-500"><Trash2 size={12}/></button>
+                                                    </div>
+                                                ))}
+                                            </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        <div>
-                                            <label className="text-xs font-bold text-gray-500">기본 규격</label>
-                                            <div className="flex gap-2 mt-1">
-                                                <select value={data.spec} onChange={e=>updateCurrentData({spec:e.target.value})} className="flex-1 p-1.5 border rounded text-sm bg-gray-50">
-                                                    <option>100*100</option><option>75*75</option><option>100*50</option><option>50*50</option>
-                                                </select>
-                                                <select value={data.thickness} onChange={e=>updateCurrentData({thickness:e.target.value})} className="w-20 p-1.5 border rounded text-sm bg-gray-50">
-                                                    <option>2.1</option><option>2.3</option><option>3.0</option><option>3.2</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div className="pt-2 border-t">
-                                            <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
-                                                <button onClick={()=>setActiveTab('standard')} className={`flex-1 py-1 text-xs font-bold rounded ${activeTab==='standard'?'bg-white shadow text-blue-600':'text-gray-500'}`}>표준</button>
-                                                <button onClick={()=>setActiveTab('custom')} className={`flex-1 py-1 text-xs font-bold rounded ${activeTab==='custom'?'bg-white shadow text-blue-600':'text-gray-500'}`}>잔재(공통)</button>
-                                            </div>
-                                            {activeTab === 'custom' && (
-                                                <div className="space-y-2">
-                                                    {customStocks.map((s, i) => (
-                                                        <div key={i} className="flex flex-col gap-1 p-2 bg-gray-50 rounded border">
-                                                            <div className="flex gap-1 mb-1">
-                                                                <select className="w-full p-1 border rounded text-xs bg-white" value={`${s.w}*${s.h}|${s.t}`} onChange={e => {
-                                                                    const val = e.target.value;
-                                                                    if(val && val.includes('|')) {
-                                                                        const [dim, t] = val.split('|');
-                                                                        const parts = dim.replace('x','*').split('*');
-                                                                        const n = [...customStocks];
-                                                                        n[i].w = parts[0]; n[i].h = parts[1]; n[i].t = t;
-                                                                        setCustomStocks(n);
-                                                                    }
-                                                                }}>
-                                                                    <option value="">규격 선택</option>
-                                                                    {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
-                                                                </select>
-                                                            </div>
-                                                            <div className="flex gap-1 items-center">
-                                                                <input type="number" className="flex-1 p-1 border rounded text-xs" value={s.length} onChange={e=>{const n=[...customStocks];n[i].length=+e.target.value;setCustomStocks(n)}} placeholder="Length"/>
-                                                                <input type="number" className="w-10 p-1 border rounded text-xs" value={s.qty} onChange={e=>{const n=[...customStocks];n[i].qty=+e.target.value;setCustomStocks(n)}} placeholder="Qty"/>
-                                                                <button onClick={()=>setCustomStocks(customStocks.filter((_,idx)=>idx!==i))} className="text-red-400"><Trash2 size={14}/></button>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    <button onClick={()=>setCustomStocks([...customStocks,{w:'100',h:'100',t:'2.1',length:0,qty:1}])} className="w-full py-1 text-xs border border-dashed rounded text-blue-500 font-bold hover:bg-blue-50">+ 추가</button>
+                                            <div>
+                                                <label className="text-xs font-bold text-gray-500">기본 규격</label>
+                                                <div className="flex gap-2 mt-1">
+                                                    <select value={data.spec} onChange={e=>updateCurrentData({spec:e.target.value})} className="flex-1 p-1.5 border rounded text-sm bg-gray-50">
+                                                        <option>100*100</option><option>75*75</option><option>100*50</option><option>50*50</option>
+                                                    </select>
+                                                    <select value={data.thickness} onChange={e=>updateCurrentData({thickness:e.target.value})} className="w-20 p-1.5 border rounded text-sm bg-gray-50">
+                                                        <option>2.1</option><option>2.3</option><option>3.0</option><option>3.2</option>
+                                                    </select>
                                                 </div>
-                                            )}
-                                        </div>
+                                            </div>
+                                            <div className="pt-2 border-t">
+                                                <div className="flex bg-gray-100 p-1 rounded-lg mb-2">
+                                                    <button onClick={()=>setActiveTab('standard')} className={`flex-1 py-1 text-xs font-bold rounded ${activeTab==='standard'?'bg-white shadow text-blue-600':'text-gray-500'}`}>표준</button>
+                                                    <button onClick={()=>setActiveTab('custom')} className={`flex-1 py-1 text-xs font-bold rounded ${activeTab==='custom'?'bg-white shadow text-blue-600':'text-gray-500'}`}>잔재(공통)</button>
+                                                </div>
+                                                {activeTab === 'custom' && (
+                                                    <div className="space-y-2">
+                                                        {customStocks.map((s, i) => (
+                                                            <div key={i} className="flex flex-col gap-1 p-2 bg-gray-50 rounded border">
+                                                                <div className="flex gap-1 mb-1">
+                                                                    <select className="w-full p-1 border rounded text-xs bg-white" value={`${s.w}*${s.h}|${s.t}`} onChange={e => {
+                                                                        const val = e.target.value;
+                                                                        if(val && val.includes('|')) {
+                                                                            const [dim, t] = val.split('|');
+                                                                            const parts = dim.replace('x','*').split('*');
+                                                                            const n = [...customStocks];
+                                                                            n[i].w = parts[0]; n[i].h = parts[1]; n[i].t = t;
+                                                                            setCustomStocks(n);
+                                                                        }
+                                                                    }}>
+                                                                        <option value="">규격 선택</option>
+                                                                        {getSpecOptions().map(opt => <option key={opt.value} value={opt.value.replace('x','*')}>{opt.label}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                                <div className="flex gap-1 items-center">
+                                                                    <input type="number" className="flex-1 p-1 border rounded text-xs" value={s.length} onChange={e=>{const n=[...customStocks];n[i].length=+e.target.value;setCustomStocks(n)}} placeholder="Length"/>
+                                                                    <input type="number" className="w-10 p-1 border rounded text-xs" value={s.qty} onChange={e=>{const n=[...customStocks];n[i].qty=+e.target.value;setCustomStocks(n)}} placeholder="Qty"/>
+                                                                    <button onClick={()=>setCustomStocks(customStocks.filter((_,idx)=>idx!==i))} className="text-red-400"><Trash2 size={14}/></button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        <button onClick={()=>setCustomStocks([...customStocks,{w:'100',h:'100',t:'2.1',length:0,qty:1}])} className="w-full py-1 text-xs border border-dashed rounded text-blue-500 font-bold hover:bg-blue-50">+ 추가</button>
+                                                    </div>
+                                                )}
+                                            </div>
                                     </div>
                                 )}
                             </div>
@@ -439,21 +744,69 @@
         };
 
         // --- Result View ---
-        const ResultView = ({ currentDong, dongs, setCurrentDong, addDong, deleteDong, renameDong, resultsByDong, runAllDongs, openExcelModal, saveToFirebase }) => {
+        const ResultView = ({ currentDong, dongs, setCurrentDong, addDong, deleteDong, renameDong, resultsByDong, runAllDongs, openExcelModal, setViewMode, setManualData }) => {
             const [resultTab, setResultTab] = useState('min_rows'); 
             const allResults = resultsByDong && currentDong ? resultsByDong[currentDong] : null;
+            
+            // If manual result exists but no other results, default to manual
+            useEffect(() => {
+                if(allResults && allResults['manual_result'] && !allResults['min_rows']) {
+                    setResultTab('manual_result');
+                }
+            }, [allResults]);
+
             const results = allResults ? allResults[resultTab] : null;
             const specKeys = results ? Object.keys(results).sort() : [];
             let overallSeq = 1;
 
+            const handleCopyToManual = () => {
+                if (!results) return;
+                
+                const newRows = [];
+                specKeys.forEach(specKey => {
+                    const { plan } = results[specKey];
+                    let w="100", h="100", t="2.1";
+                    try {
+                        const dims = specKey.split(' ')[0] || "";
+                        const tPart = specKey.split(' ')[1] || "";
+                        if (dims.includes('*')) [w, h] = dims.split('*'); else if (dims.includes('x')) [w, h] = dims.split('x'); else { w=dims; h=""; }
+                        t = tPart.replace('T', '');
+                    } catch(e) {}
+                    
+                    let sortedPlan = [...plan];
+                    // Manual view doesn't need sorting, but keep it clean
+                    sortedPlan.sort((a, b) => b.stockLength - a.stockLength);
+                    
+                    sortedPlan.forEach((group) => {
+                         const cuts = Array(8).fill().map(() => ({ l: '', count: '', marking: '' }));
+                         group.parts.forEach((part, idx) => {
+                             if(idx < 8) {
+                                 cuts[idx] = { l: part.length, count: part.count, marking: part.marking };
+                             }
+                         });
+                         
+                         const newRow = {
+                             id: Date.now() + Math.random(),
+                             t: t, w: w, h: h, l: group.stockLength, qty: Math.floor(group.qty),
+                             cuts: cuts
+                         };
+                         newRows.push(newRow);
+                    });
+                });
+                
+                setManualData(prev => ({ ...prev, [currentDong]: newRows }));
+                setViewMode('manual');
+                alert("현재 보고 있는 결과가 'CP 직접 작성' 화면으로 복사되었습니다.");
+            };
+
             return (
                 <div className="animate-fade-in pb-20">
                     <div className="flex justify-between items-center mb-4 print:hidden">
-                        <h2 className="text-lg font-bold text-gray-800">CP 결과 확인 ({currentDong})</h2>
+                        <h2 className="text-lg font-bold text-gray-800">CP 자동 결과 ({currentDong})</h2>
                         <div className="flex gap-2">
+                             <button onClick={handleCopyToManual} className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-600 transition flex items-center gap-2"><Copy size={16}/> 수정 (결과 복사)</button>
                             <button onClick={runAllDongs} className="bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-gray-900 transition flex items-center gap-2"><Layers size={16}/> 전체 동 계산</button>
                             <button onClick={openExcelModal} className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-green-700 flex items-center gap-2 transition"><FileDown size={16}/> 엑셀 저장</button>
-                            <button onClick={saveToFirebase} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow hover:bg-blue-700 flex items-center gap-2 transition"><Save size={16}/> 저장</button>
                         </div>
                     </div>
                     <DongTabs dongs={dongs} currentDong={currentDong} setCurrentDong={setCurrentDong} addDong={addDong} deleteDong={deleteDong} renameDong={renameDong} />
@@ -462,9 +815,12 @@
                         <div className="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400"><p>계산된 결과가 없습니다.</p></div>
                     ) : (
                         <div>
-                            <div className="flex mb-4 border-b print:hidden">
+                            <div className="flex mb-4 border-b print:hidden gap-2">
                                 <button onClick={()=>setResultTab('min_rows')} className={`px-6 py-3 font-bold text-sm ${resultTab==='min_rows' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}>① 작업 편의 (Work Convenience)</button>
                                 <button onClick={()=>setResultTab('min_loss')} className={`px-6 py-3 font-bold text-sm ${resultTab==='min_loss' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-500 hover:text-gray-700'}`}>② LOSS 최소화 (자재 절약)</button>
+                                {allResults['manual_result'] && (
+                                    <button onClick={()=>setResultTab('manual_result')} className={`px-6 py-3 font-bold text-sm ${resultTab==='manual_result' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}>③ 수동 계산 결과</button>
+                                )}
                             </div>
                             <div className="space-y-8 bg-white p-8 rounded-xl shadow-sm border border-gray-200 min-h-screen">
                                 {specKeys.map((specKey, idx) => {
@@ -476,10 +832,10 @@
                                         if (dims.includes('*')) [w, h] = dims.split('*'); else if (dims.includes('x')) [w, h] = dims.split('x'); else { w=dims; h=""; }
                                         t = tPart.replace('T', '');
                                     } catch(e) {}
-                                    const displayLoss = summary.totalLoss.toLocaleString();
+                                    const displayLoss = Number(summary.totalLoss).toLocaleString();
                                     
                                     let sortedPlan = [...plan];
-                                    // *** PATCH: Sort by Stock Length Descending ***
+                                    // Manual result shouldn't be re-sorted drastically, but default logic is fine
                                     sortedPlan.sort((a, b) => {
                                         if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
                                         if (resultTab === 'min_rows') return b.qty - a.qty;
@@ -489,7 +845,7 @@
                                     return (
                                         <div key={specKey || idx} className="break-before-page">
                                             <div className="flex items-center gap-3 mb-3 pb-2 border-b border-gray-100 print:border-none">
-                                                <span className={`font-bold px-3 py-1 rounded text-sm print:hidden ${resultTab==='min_rows'?'bg-blue-100 text-blue-700':'bg-green-100 text-green-700'}`}>#{idx+1} {resultTab==='min_rows'?'작업편의':'LOSS최소'}</span>
+                                                <span className={`font-bold px-3 py-1 rounded text-sm print:hidden ${resultTab==='min_rows'?'bg-blue-100 text-blue-700':(resultTab==='min_loss'?'bg-green-100 text-green-700':'bg-purple-100 text-purple-700')}`}>#{idx+1} {resultTab==='min_rows'?'작업편의':(resultTab==='min_loss'?'LOSS최소':'수동결과')}</span>
                                                 <h3 className="font-bold text-xl text-gray-800">{specKey}</h3>
                                                 <div className="text-xs text-gray-500 ml-auto flex gap-4 print:text-black">
                                                     <span>총 원본: <b>{summary.totalBars}본</b></span>
@@ -536,8 +892,8 @@
                                                                 <td className="border-x border-gray-200 text-left px-2 truncate max-w-[150px]">{part.marking}</td>
                                                                 {pIdx===0 && (
                                                                     <>
-                                                                        <td rowSpan={group.parts.length} className={`border-x border-gray-200 font-bold ${group.remainder >= 650 ? 'bg-[#FFCCBC] text-red-600' : (group.remainder < 150 ? 'text-red-600' : '')}`}>{group.remainder.toLocaleString()}</td>
-                                                                        <td rowSpan={group.parts.length} className="border-x border-gray-200 text-gray-500">{(group.remainder * group.qty).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                                                                        <td rowSpan={group.parts.length} className={`border-x border-gray-200 font-bold ${group.remainder >= 650 ? 'bg-[#FFCCBC] text-red-600' : (group.remainder < 150 ? 'text-red-600' : '')}`}>{Number(group.remainder).toLocaleString()}</td>
+                                                                        <td rowSpan={group.parts.length} className="border-x border-gray-200 text-gray-500">{(Number(group.remainder) * Number(group.qty)).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
                                                                         <td rowSpan={group.parts.length} className="border-x border-gray-200"></td>
                                                                     </>
                                                                 )}
@@ -556,56 +912,13 @@
             );
         };
 
-        // --- Excel Export Modal Component ---
-        const ExcelExportModal = ({ isOpen, onClose, onConfirm, dongs }) => {
-            const [targetType, setTargetType] = useState('current');
-            const [modeType, setModeType] = useState('min_rows');
-
-            if (!isOpen) return null;
-
-            return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 print:hidden">
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-96 modal-fade-in relative">
-                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20}/></button>
-                        <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2"><FileDown className="text-green-600"/> 엑셀 다운로드</h3>
-                        <div className="space-y-6">
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 대상</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold flex items-center justify-center gap-2 transition ${targetType === 'current' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button>
-                                    <button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold flex items-center justify-center gap-2 transition ${targetType === 'all' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button>
-                                </div>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 버전</label>
-                                <div className="space-y-2">
-                                    <button onClick={() => setModeType('min_rows')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'min_rows' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                        <span>① 작업 편의 (Work Convenience)</span>{modeType === 'min_rows' && <Check size={16}/>}
-                                    </button>
-                                    <button onClick={() => setModeType('min_loss')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'min_loss' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                        <span>② LOSS 최소화 (자재 절약)</span>{modeType === 'min_loss' && <Check size={16}/>}
-                                    </button>
-                                    <button onClick={() => setModeType('both')} className={`w-full p-3 rounded-lg border text-left text-sm font-medium transition flex justify-between items-center ${modeType === 'both' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50'}`}>
-                                        <span>③ 둘 다 저장 (파일 2개)</span>{modeType === 'both' && <Check size={16}/>}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <div className="mt-8">
-                            <button onClick={() => onConfirm(targetType, modeType)} className="w-full bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2"><FileDown size={18}/> 다운로드 시작</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
         // --- Main App ---
         function App() {
-            // ... (State logic same as before)
             const [user, setUser] = useState(null);
             const [viewMode, setViewMode] = useState('input'); 
             const [isFirebaseReady, setIsFirebaseReady] = useState(false);
             const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+            const [isCalculating, setIsCalculating] = useState(false); // Loading State
             const [projectInfo, setProjectInfo] = useState({ company: '', site: '', note: '', isIronBanding: false, isUnder1Ton: false });
             const [dongs, setDongs] = useState(['1동']);
             const [currentDong, setCurrentDong] = useState('1동');
@@ -614,13 +927,11 @@
             const [resultsByDong, setResultsByDong] = useState({});
             const [activeTab, setActiveTab] = useState('standard'); 
             const [customStocks, setCustomStocks] = useState([{ w:'100', h:'100', t:'2.1', length: 6000, qty: 10 }]);
-            const [savedPlans, setSavedPlans] = useState([]);
             const [isUserStockMode, setIsUserStockMode] = useState(false);
             const [userStockList, setUserStockList] = useState([]);
-            const firebaseRef = useRef(null);
-            const dbRef = useRef(null);
+            
+            const [manualData, setManualData] = useState({});
 
-            // ... (Data Functions)
             const getCurrentData = () => dongData[currentDong] || { rawInput: '', gridData: [], colMapping: {}, parsedItems: [], spec: '100*100', thickness: '2.1' };
             const updateCurrentData = (updates) => { setDongData(prev => ({ ...prev, [currentDong]: { ...prev[currentDong], ...updates } })); };
             const getStockLengths = (w, h, t) => {
@@ -635,21 +946,32 @@
                 }
                 return settings["default"] || [];
             };
-            // ... (Firebase Init)
-            const initFirebase = async () => { if (!window.FirebaseSDK) return; try { const { initializeApp, getAuth, getFirestore, signInAnonymously, onAuthStateChanged, signInWithCustomToken } = window.FirebaseSDK; const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null; if (!firebaseConfig) return; if (!firebaseRef.current) { const app = initializeApp(firebaseConfig); const auth = getAuth(app); const db = getFirestore(app); firebaseRef.current = app; dbRef.current = db; try { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token); else await signInAnonymously(auth); } catch (e) { console.error("Auth Error", e); } onAuthStateChanged(auth, async (u) => { setUser(u); setIsFirebaseReady(true); }); } } catch (e) { console.warn(e); } };
+            
+            const initFirebase = async () => { if (!window.FirebaseSDK) return; try { const { initializeApp, getAuth } = window.FirebaseSDK; } catch (e) { console.warn(e); } };
             useEffect(() => { if (window.FirebaseSDK) initFirebase(); else window.addEventListener('firebase-sdk-ready', initFirebase); return () => window.removeEventListener('firebase-sdk-ready', initFirebase); }, []);
-            useEffect(() => { if (!user || !dbRef.current || !isFirebaseReady) return; try { const { collection, query, onSnapshot } = window.FirebaseSDK; const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'; const q = query(collection(dbRef.current, 'artifacts', appId, 'public', 'data', 'cuttingPlans')); const unsubscribe = onSnapshot(q, (snapshot) => { const plans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); plans.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)); setSavedPlans(plans); }); return () => unsubscribe(); } catch(e) {} }, [user, isFirebaseReady]);
-            // ... (Action Handlers)
+            
             const addDong = () => { const newDongName = prompt("새 동 이름을 입력하세요:"); if (newDongName && !dongs.includes(newDongName)) { setDongs([...dongs, newDongName]); setDongData(prev => ({ ...prev, [newDongName]: { rawInput: '', gridData: [], colMapping: { 1: 'width', 2: 'height', 3: 'thickness', 4: 'length', 8: 'qty', 13: 'marking' }, parsedItems: [], spec: '100*100', thickness: '2.1' } })); setCurrentDong(newDongName); } };
-            const renameDong = (oldName) => { const newName = prompt(`'${oldName}'의 새 이름을 입력하세요:`, oldName); if (newName && newName !== oldName && !dongs.includes(newName)) { setDongs(prev => prev.map(d => d === oldName ? newName : d)); if (currentDong === oldName) setCurrentDong(newName); setDongData(prev => { const n = {...prev}; n[newName] = n[oldName]; delete n[oldName]; return n; }); setResultsByDong(prev => { const n = {...prev}; if(n[oldName]) { n[newName] = n[oldName]; delete n[oldName]; } return n; }); } };
-            const deleteDong = (targetDong) => { if (dongs.length <= 1) { alert("최소 하나의 동은 있어야 합니다."); return; } if (confirm(`'${targetDong}'을 삭제하시겠습니까?`)) { const newDongs = dongs.filter(d => d !== targetDong); setDongs(newDongs); if (currentDong === targetDong) setCurrentDong(newDongs[0]); setDongData(prev => { const n = {...prev}; delete n[targetDong]; return n; }); setResultsByDong(prev => { const n = {...prev}; delete n[targetDong]; return n; }); } };
+            const renameDong = (oldName) => { const newName = prompt(`'${oldName}'의 새 이름을 입력하세요:`, oldName); if (newName && newName !== oldName && !dongs.includes(newName)) { setDongs(prev => prev.map(d => d === oldName ? newName : d)); if (currentDong === oldName) setCurrentDong(newName); setDongData(prev => { const n = {...prev}; n[newName] = n[oldName]; delete n[oldName]; return n; }); setResultsByDong(prev => { const n = {...prev}; if(n[oldName]) { n[newName] = n[oldName]; delete n[oldName]; } return n; }); setManualData(prev => { const n = {...prev}; n[newName] = n[oldName]; delete n[oldName]; return n; }); } };
+            const deleteDong = (targetDong) => { if (dongs.length <= 1) { alert("최소 하나의 동은 있어야 합니다."); return; } if (confirm(`'${targetDong}'을 삭제하시겠습니까?`)) { const newDongs = dongs.filter(d => d !== targetDong); setDongs(newDongs); if (currentDong === targetDong) setCurrentDong(newDongs[0]); setDongData(prev => { const n = {...prev}; delete n[targetDong]; return n; }); setResultsByDong(prev => { const n = {...prev}; delete n[targetDong]; return n; }); setManualData(prev => { const n = {...prev}; delete n[targetDong]; return n; }); } };
             const handlePaste = (e) => { e.preventDefault(); const text = e.clipboardData.getData('text'); const rows = text.trim().split('\n').map(row => row.split('\t')); updateCurrentData({ rawInput: text, gridData: rows }); };
-            const parseItemsFromGrid = (gridData, colMapping, defaultSpec, defaultThickness) => { const lenIdx = Object.keys(colMapping).find(key => colMapping[key] === 'length'); const qtyIdx = Object.keys(colMapping).find(key => colMapping[key] === 'qty'); if (!lenIdx || !qtyIdx) return []; const wIdx = Object.keys(colMapping).find(key => colMapping[key] === 'width'); const hIdx = Object.keys(colMapping).find(key => colMapping[key] === 'height'); const tIdx = Object.keys(colMapping).find(key => colMapping[key] === 'thickness'); const markIdx = Object.keys(colMapping).find(key => colMapping[key] === 'marking'); let items = []; let rowCounter = 0; gridData.forEach((row) => { let rawLen = row[lenIdx]?.trim().replace(/,/g, ''); let rawQty = row[qtyIdx]?.trim().replace(/,/g, ''); if (!rawLen || !rawQty) return; let length = parseFloat(rawLen); const qty = parseInt(rawQty, 10); if (isNaN(length) || isNaN(qty) || qty <= 0) return; if (length < 20) length = Math.round(length * 1000); else length = Math.round(length); let w = wIdx ? row[wIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let h = hIdx ? row[hIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let t = tIdx ? row[tIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let marking = markIdx ? (row[markIdx]?.trim() || '') : ''; if (!w) w = defaultSpec.split('*')[0] || '100'; if (!h) h = defaultSpec.split('*')[1] || '100'; if (!t) t = defaultThickness; const dims = [parseInt(w), parseInt(h)].sort((a,b)=>b-a); const specKey = `${dims[0]}*${dims[1]} ${t}T`; items.push({ id: rowCounter++, length, qty, marking, specKey, w: dims[0], h: dims[1], t: t }); }); return items; };
-
+            
+            // *** OPTIMIZATION ENGINE ***
             const solvePatternBased = (items, availableStocks, mode, strategy = 'mixed', randomize = false, stockLimits = {}) => {
-                let inventory = {}; items.forEach(item => { if (!inventory[item.length]) { inventory[item.length] = { count: 0, itemsByMarking: {} }; } inventory[item.length].count++; if (!inventory[item.length].itemsByMarking[item.marking]) { inventory[item.length].itemsByMarking[item.marking] = []; } inventory[item.length].itemsByMarking[item.marking].push(item); });
+                let inventory = {}; 
+                items.forEach(item => { 
+                    if (!inventory[item.length]) { inventory[item.length] = { count: 0, itemsByMarking: {} }; } 
+                    inventory[item.length].count++; 
+                    if (!inventory[item.length].itemsByMarking[item.marking]) inventory[item.length].itemsByMarking[item.marking] = [];
+                    inventory[item.length].itemsByMarking[item.marking].push(item);
+                });
+                
                 let uniqueLengths = Object.keys(inventory).map(Number).sort((a,b) => b - a);
-                if (randomize) { for (let i = uniqueLengths.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [uniqueLengths[i], uniqueLengths[j]] = [uniqueLengths[j], uniqueLengths[i]]; } }
+                if (randomize) { 
+                    for (let i = uniqueLengths.length - 1; i > 0; i--) { 
+                        const j = Math.floor(Math.random() * (i + 1)); [uniqueLengths[i], uniqueLengths[j]] = [uniqueLengths[j], uniqueLengths[i]]; 
+                    } 
+                }
+                
                 let finalPlan = []; let unallocated = []; let currentStockLimits = { ...stockLimits };
                 availableStocks.sort((a, b) => a - b);
                 
@@ -661,25 +983,30 @@
                     for (let stockLen of candidateStocks) {
                         if (currentStockLimits[stockLen] !== undefined && currentStockLimits[stockLen] <= 0) continue;
                         let strategyBonus = 0; if (strategy !== 'mixed' && parseInt(strategy.split('_')[1]) === stockLen) strategyBonus = 20000;
-                        
                         let startingCandidates = [...uniqueLengths];
                         if (randomize) { for (let i = startingCandidates.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [startingCandidates[i], startingCandidates[j]] = [startingCandidates[j], startingCandidates[i]]; } }
-
                         for (let startLen of startingCandidates) {
                             if (startLen > stockLen) continue;
                             let currentPattern = { parts: [], remainder: stockLen }; let tempInventoryCount = {};
                             currentPattern.parts.push(startLen); currentPattern.remainder -= startLen; tempInventoryCount[startLen] = (tempInventoryCount[startLen] || 0) + 1;
                             
                             let candidates = [...uniqueLengths];
-                            
                             while (currentPattern.remainder > 0) {
                                 let found = false;
+                                candidates.sort((a,b) => {
+                                    const usedA = tempInventoryCount[a] || 0;
+                                    const usedB = tempInventoryCount[b] || 0;
+                                    return usedA - usedB; 
+                                });
+
                                 for (let l of candidates) {
-                                    const usedCountInPattern = (tempInventoryCount[l] || 0); if (inventory[l].count <= usedCountInPattern) continue;
+                                    const usedCountInPattern = (tempInventoryCount[l] || 0); 
+                                    if (inventory[l].count <= usedCountInPattern) continue;
                                     if (l <= currentPattern.remainder) {
                                         let nextRem = currentPattern.remainder - l;
                                         if (nextRem === 0 || nextRem >= 150) { 
-                                            currentPattern.parts.push(l); currentPattern.remainder -= l; tempInventoryCount[l] = (tempInventoryCount[l] || 0) + 1; found = true; break; 
+                                            currentPattern.parts.push(l); currentPattern.remainder -= l; 
+                                            tempInventoryCount[l] = (tempInventoryCount[l] || 0) + 1; found = true; break; 
                                         }
                                     }
                                 }
@@ -688,48 +1015,33 @@
                             
                             if (currentPattern.remainder > 0 && currentPattern.remainder < 150) continue;
                             
-                            // *** SCORING SYSTEM (Ver 10.1.0) ***
-                            let score = 0; // Base Score
-
-                            // 1. 순번 최소화 (Maximize Repeats)
+                            let score = 0; 
+                            
                             let maxRepeats = Infinity; 
-                            Object.keys(tempInventoryCount).forEach(p => { 
-                                maxRepeats = Math.min(maxRepeats, Math.floor(inventory[p].count / tempInventoryCount[p])); 
-                            });
+                            Object.keys(tempInventoryCount).forEach(p => { maxRepeats = Math.min(maxRepeats, Math.floor(inventory[p].count / tempInventoryCount[p])); });
                             if (currentStockLimits[stockLen] !== undefined) maxRepeats = Math.min(maxRepeats, currentStockLimits[stockLen]);
                             
-                            // Strategy Bonus
                             score += strategyBonus;
 
-                            if (mode === 'min_rows') {
-                                score += (maxRepeats * 5000); 
+                            if (mode === 'min_rows') { 
+                                score += (maxRepeats * 100000); 
 
-                                const markingsInPattern = new Set();
-                                Object.keys(tempInventoryCount).forEach(len => {
-                                    const inv = inventory[len];
-                                    let domMarking = ''; let maxC = -1;
-                                    Object.keys(inv.itemsByMarking).forEach(m => {
-                                        if(inv.itemsByMarking[m].length > maxC) { maxC = inv.itemsByMarking[m].length; domMarking = m; }
-                                    });
-                                    if(domMarking) markingsInPattern.add(domMarking);
-                                });
-                                if (markingsInPattern.size > 1) score -= 10000; 
-                                
-                                score -= currentPattern.remainder; 
-
-                                if (currentPattern.remainder > 650) score -= 100000; 
-
-                                if (currentPattern.parts.length > 8) score -= ((currentPattern.parts.length - 8) * 3000);
+                                if (currentPattern.remainder >= 150 && currentPattern.remainder <= 650) {
+                                    // Perfect zone
+                                } else if (currentPattern.remainder > 650) {
+                                    score -= 500000; 
+                                    score -= currentPattern.remainder;
+                                } else {
+                                    score -= 99999999;
+                                }
 
                                 const shortParts = currentPattern.parts.filter(p => p <= 500).length;
-                                if (shortParts > 4) score -= ((shortParts - 4) * 2000);
+                                if (shortParts > 1) score -= (shortParts * 50000);
 
                                 score -= (stockLen * 2);
                             } 
                             else { 
-                                // Min Loss Mode
-                                if (currentPattern.remainder === 0) score += 1000000; 
-                                else score -= currentPattern.remainder; 
+                                if (currentPattern.remainder === 0) score += 1000000; else score -= currentPattern.remainder; 
                             }
                             
                             if (score > bestScore) { bestScore = score; bestPattern = { ...currentPattern, maxRepeats, tempInventoryCount, stockLength: stockLen }; } 
@@ -739,54 +1051,45 @@
                     if (bestPattern) {
                         const repeat = bestPattern.maxRepeats; 
                         if (currentStockLimits[bestPattern.stockLength] !== undefined) currentStockLimits[bestPattern.stockLength] -= repeat;
-                        
                         for (let r = 0; r < repeat; r++) {
                             const allocatedParts = [];
-                            let stickyMarking = null;
-
+                            const flatAvailable = [];
                             bestPattern.parts.forEach(len => {
-                                const group = inventory[len]; 
-                                const markings = Object.keys(group.itemsByMarking).filter(m => group.itemsByMarking[m].length > 0); 
-                                
-                                markings.sort((a, b) => {
-                                    if (stickyMarking) {
-                                        if (a === stickyMarking && b !== stickyMarking) return -1;
-                                        if (b === stickyMarking && a !== stickyMarking) return 1;
-                                    }
-                                    return group.itemsByMarking[b].length - group.itemsByMarking[a].length;
-                                });
-
-                                if (markings.length > 0) { 
-                                    const targetMarking = markings[0]; 
-                                    if (!stickyMarking) stickyMarking = targetMarking; // Set sticky
-                                    const item = group.itemsByMarking[targetMarking].pop(); 
-                                    group.count--; 
-                                    allocatedParts.push(item); 
+                                const group = inventory[len];
+                                const markings = Object.keys(group.itemsByMarking).filter(m => group.itemsByMarking[m].length > 0);
+                                if(markings.length > 0) {
+                                    markings.sort((a,b) => group.itemsByMarking[b].length - group.itemsByMarking[a].length);
+                                    const targetM = markings[0];
+                                    const item = group.itemsByMarking[targetM].pop();
+                                    group.count--;
+                                    allocatedParts.push(item);
                                 }
                             });
-                            allocatedParts.sort((a,b)=>b.length-a.length); finalPlan.push({ stockLength: bestPattern.stockLength, parts: allocatedParts, remainder: bestPattern.remainder });
+                            
+                            allocatedParts.sort((a,b)=>b.length-a.length); 
+                            finalPlan.push({ stockLength: bestPattern.stockLength, parts: allocatedParts, remainder: bestPattern.remainder });
                         }
                     } else { break; }
                 }
-                // Handle Unallocated (same as before)
+                
                 Object.keys(inventory).forEach(len => {
                     const group = inventory[len]; const markings = Object.keys(group.itemsByMarking);
                     markings.forEach(m => {
                         while (group.itemsByMarking[m].length > 0) {
-                            const item = group.itemsByMarking[m].pop(); group.count--; let selectedStock = null;
-                            for (let sLen of availableStocks) { if (currentStockLimits[sLen] !== undefined && currentStockLimits[sLen] <= 0) continue; if (sLen >= item.length) { const r = sLen - item.length; if (r === 0 || r >= 150) { selectedStock = sLen; break; } } }
-                            if (!selectedStock) { for (let sLen of availableStocks) { if (currentStockLimits[sLen] > 0 && sLen >= item.length) { selectedStock = sLen; break; } } }
-                            if (!selectedStock && Object.keys(stockLimits).length === 0) selectedStock = Math.max(...availableStocks);
-                            if (selectedStock) { if (currentStockLimits[selectedStock] !== undefined) currentStockLimits[selectedStock]--; finalPlan.push({ stockLength: selectedStock, parts: [item], remainder: selectedStock - item.length }); } else { unallocated.push(item); }
+                            const item = group.itemsByMarking[m].pop(); group.count--; 
+                            let selectedStock = availableStocks.find(s => s >= item.length);
+                            if (!selectedStock) selectedStock = Math.max(...availableStocks); 
+                            finalPlan.push({ stockLength: selectedStock, parts: [item], remainder: selectedStock - item.length });
                         }
                     });
                 });
+
                 return finalPlan;
             };
 
             const calculatePlanScore = (plan) => {
                 let score = 0;
-                score -= (plan.length * 10000);
+                score -= (plan.length * 1000000); 
 
                 let markingDistribution = {};
                 plan.forEach(pattern => {
@@ -797,21 +1100,17 @@
                     });
                     
                     let rem = pattern.remainder;
-                    if (rem > 0 && rem < 150) return -Infinity; // Hard Fail
-                    if (rem > 650) score -= 100000; // Remnant Split Penalty
-                    score -= rem; // Loss Penalty
+                    if (rem > 0 && rem < 150) score -= 9999999;
+                    if (rem > 650) { score -= 500000; score -= rem; }
 
-                    if (pattern.parts.length > 8) score -= ((pattern.parts.length - 8) * 3000);
-
+                    if (pattern.parts.length > 8) score -= ((pattern.parts.length - 8) * 5000);
                     let shortParts = pattern.parts.filter(p => p.length <= 500).length;
-                    if (shortParts > 4) score -= ((shortParts - 4) * 2000);
+                    if (shortParts > 1) score -= (shortParts * 50000);
                 });
 
                 Object.keys(markingDistribution).forEach(m => {
                     let count = markingDistribution[m];
-                    if (count > 1) {
-                        score -= ((count - 1) * 50000); 
-                    }
+                    if (count > 1) score -= ((count - 1) * 200000); 
                 });
 
                 return score;
@@ -824,81 +1123,149 @@
                     try { const dims = specKey.split(' ')[0] || "100*100"; const thick = specKey.split(' ')[1] || "2.1T"; if (dims.includes('*')) [stockW, stockH] = dims.split('*'); stockT = thick.replace('T', ''); } catch(e) {}
                     const groupItems = groups[specKey]; let allParts = []; groupItems.forEach(item => { for (let i = 0; i < item.qty; i++) allParts.push({ ...item, uuid: Math.random() }); });
                     let availableStocks = []; let stockLimits = {};
-                    if (isUserStockMode) {
-                        userStockList.forEach(s => { if (parseInt(s.w) == parseInt(stockW) && parseInt(s.h) == parseInt(stockH) && s.t == stockT) { if (!stockLimits[s.length]) stockLimits[s.length] = 0; stockLimits[s.length] += s.qty; availableStocks.push(s.length); } });
-                        availableStocks = [...new Set(availableStocks)].sort((a,b)=>a-b);
-                    } else {
-                        let stds = getStockLengths(stockW, stockH, stockT) || []; if (activeTab === 'custom') { customStocks.forEach(s => { if (parseInt(s.w) == parseInt(stockW) && parseInt(s.h) == parseInt(stockH) && s.t == stockT) { if (!stockLimits[s.length]) stockLimits[s.length] = 0; stockLimits[s.length] += s.qty; availableStocks.push(s.length); } }); }
-                        stds.forEach(l => { if (!availableStocks.includes(l)) availableStocks.push(l); }); availableStocks.sort((a,b)=>a-b);
-                    }
+                    if (isUserStockMode) { userStockList.forEach(s => { if (parseInt(s.w) == parseInt(stockW) && parseInt(s.h) == parseInt(stockH) && s.t == stockT) { if (!stockLimits[s.length]) stockLimits[s.length] = 0; stockLimits[s.length] += s.qty; availableStocks.push(s.length); } }); availableStocks = [...new Set(availableStocks)].sort((a,b)=>a-b); } else { let stds = getStockLengths(stockW, stockH, stockT) || []; if (activeTab === 'custom') { customStocks.forEach(s => { if (parseInt(s.w) == parseInt(stockW) && parseInt(s.h) == parseInt(stockH) && s.t == stockT) { if (!stockLimits[s.length]) stockLimits[s.length] = 0; stockLimits[s.length] += s.qty; availableStocks.push(s.length); } }); } stds.forEach(l => { if (!availableStocks.includes(l)) availableStocks.push(l); }); availableStocks.sort((a,b)=>a-b); }
                     if(availableStocks.length === 0) availableStocks = [6000];
                     
-                    const SIMULATION_RUNS = 5000; 
-                    const validPlans = [];
-
+                    const SIMULATION_RUNS = 2000; const validPlans = [];
                     for (let i = 0; i < SIMULATION_RUNS; i++) {
                         let strategy = 'mixed'; if (Math.random() > 0.5 && availableStocks.length > 0) { const randomStock = availableStocks[Math.floor(Math.random() * availableStocks.length)]; strategy = `force_${randomStock}`; }
                         const plan = solvePatternBased([...allParts], availableStocks, mode, strategy, true, stockLimits);
-                        
-                        let totalLoss = 0; let invalidCount = 0; const patternSignature = new Set();
-                        plan.forEach(p => { totalLoss += p.remainder; if (p.remainder < 150 && p.remainder !== 0) invalidCount++; if (p.remainder === 0) invalidCount++; const sig = `${p.stockLength}:${p.parts.map(x=>x.length).sort().join(',')}`; patternSignature.add(sig); });
-                        
-                        if (invalidCount === 0) {
+                        if (plan.length > 0) {
                             let planScore = 0;
-                            if (mode === 'min_rows') {
-                                planScore = calculatePlanScore(plan);
-                            } else {
-                                planScore = -totalLoss;
-                            }
-                            validPlans.push({ plan, score: planScore, totalLoss, rowCount: patternSignature.size });
+                            if(mode === 'min_rows') planScore = calculatePlanScore(plan);
+                            else planScore = -(plan.reduce((acc,p)=>acc+p.remainder,0)); 
+                            validPlans.push({ plan, score: planScore }); 
                         }
                     }
-
-                    if (validPlans.length > 0) {
-                        validPlans.sort((a, b) => b.score - a.score);
-                    }
-                    
+                    if (validPlans.length > 0) validPlans.sort((a, b) => b.score - a.score);
                     const bestGlobalPlan = validPlans.length > 0 ? validPlans[0].plan : [];
-
                     const groupedMap = new Map();
                     bestGlobalPlan.forEach(plan => {
                         const sortedParts = [...plan.parts].sort((a,b) => b.length - a.length || a.marking.localeCompare(b.marking));
                         const signature = sortedParts.map(p => `${p.length}[${p.marking}]`).join('|');
                         const key = `${plan.stockLength}_${signature}`;
-                        if (groupedMap.has(key)) { const existing = groupedMap.get(key); existing.qty += 1; } 
+                        if (groupedMap.has(key)) { groupedMap.get(key).qty += 1; } 
                         else {
                             const partCounts = new Map(); sortedParts.forEach(p => { const pKey = `${p.length}__${p.marking}`; if(partCounts.has(pKey)) { partCounts.get(pKey).count++; } else { partCounts.set(pKey, { ...p, count: 1 }); } });
-                            const displayParts = Array.from(partCounts.values()).sort((a,b)=>b.length-a.length);
-                            groupedMap.set(key, { id: key, stockLength: plan.stockLength, parts: displayParts, totalPartsInOneStock: plan.parts.length, remainder: plan.remainder, qty: 1 });
+                            groupedMap.set(key, { id: key, stockLength: plan.stockLength, parts: Array.from(partCounts.values()).sort((a,b)=>b.length-a.length), remainder: plan.remainder, qty: 1 });
                         }
                     });
-                    groupedMap.forEach(group => { group.parts = group.parts.map(p => ({ ...p, totalQty: p.count * group.qty })); group.parts.sort((a,b) => b.length - a.length || a.marking.localeCompare(b.marking)); });
+                    groupedMap.forEach(group => { group.parts = group.parts.map(p => ({ ...p, totalQty: p.count * group.qty })); });
                     const finalGroupedPlan = Array.from(groupedMap.values());
-                    
-                    // *** MODIFICATION: Sort by Stock Length Descending ***
-                    finalGroupedPlan.sort((a, b) => {
-                        // 1. Primary Sort: Stock Length (Descending) - 긴 원본이 먼저 오도록
-                        if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
-                        
-                        // 2. Secondary Sort: Based on Mode
-                        if (mode === 'min_rows') return b.qty - a.qty; // Then Quantity Descending
-                        else return a.remainder - b.remainder; // Then Remainder Ascending
-                    });
-                    
                     const totalBars = bestGlobalPlan.length; const totalStockLen = bestGlobalPlan.reduce((acc, p) => acc + p.stockLength, 0); const totalPartLen = bestGlobalPlan.reduce((acc, p) => acc + p.parts.reduce((s, pt) => s + pt.length, 0), 0); const totalLoss = totalStockLen - totalPartLen; const lossRate = totalStockLen ? ((totalLoss / totalStockLen) * 100).toFixed(2) : 0;
                     computedResults[specKey] = { plan: finalGroupedPlan, summary: { totalBars, lossRate, totalLoss, unallocatedCount: 0 } };
                 });
                 return computedResults;
             };
 
-            const processGridData = () => { const data = getCurrentData(); const items = parseItemsFromGrid(data.gridData, data.colMapping, data.spec, data.thickness); if (items.length === 0) { alert("유효한 데이터가 없습니다."); return; } updateCurrentData({ parsedItems: items }); setTimeout(() => { const resMinRows = runAdvancedOptimization(items, 'min_rows'); const resMinLoss = runAdvancedOptimization(items, 'min_loss'); setResultsByDong(prev => ({ ...prev, [currentDong]: { min_rows: resMinRows, min_loss: resMinLoss } })); setViewMode('result'); }, 50); };
-            const runAllDongs = () => { setTimeout(() => { const newResults = {}; let processedCount = 0; dongs.forEach(dName => { const dData = dongData[dName]; if (!dData || !dData.gridData || dData.gridData.length === 0) return; const items = parseItemsFromGrid(dData.gridData, dData.colMapping, dData.spec, dData.thickness); if (items.length > 0) { newResults[dName] = { min_rows: runAdvancedOptimization(items, 'min_rows'), min_loss: runAdvancedOptimization(items, 'min_loss') }; processedCount++; } }); if (processedCount > 0) { setResultsByDong(newResults); alert(`총 ${processedCount}개 동의 계산이 완료되었습니다.`); setViewMode('result'); } else { alert("계산할 데이터가 있는 동이 없습니다."); } }, 50); };
+            const processGridData = () => { 
+                const data = getCurrentData(); 
+                const items = parseItemsFromGrid(data.gridData, data.colMapping, data.spec, data.thickness); 
+                if (items.length === 0) { alert("유효한 데이터가 없습니다."); return; } 
+                updateCurrentData({ parsedItems: items }); 
+                
+                setIsCalculating(true);
+                setTimeout(() => { 
+                    const resMinRows = runAdvancedOptimization(items, 'min_rows'); 
+                    const resMinLoss = runAdvancedOptimization(items, 'min_loss'); 
+                    setResultsByDong(prev => ({ ...prev, [currentDong]: { min_rows: resMinRows, min_loss: resMinLoss } })); 
+                    setViewMode('result'); 
+                    setIsCalculating(false);
+                }, 100); 
+            };
 
-            // ... (Export and Helper Functions same as before)
-            const handleExcelExport = (targetType, modeType) => { try { if (typeof XLSX === 'undefined') throw new Error("XLSX 라이브러리가 로드되지 않았습니다."); if (typeof saveAs === 'undefined') throw new Error("FileSaver 라이브러리가 로드되지 않았습니다."); setIsExcelModalOpen(false); const exportTargets = targetType === 'current' ? [currentDong] : dongs; let downloadCount = 0; exportTargets.forEach(dongName => { const modes = modeType === 'both' ? ['min_rows', 'min_loss'] : [modeType]; modes.forEach(mode => { const wb = exportToExcelBuffer(dongName, mode); if (wb) { const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); const company = projectInfo.company || '업체'; const site = projectInfo.site || '현장'; let fileName = `${company}(${site})-${dongName}`; if (modeType === 'both') { const suffix = mode === 'min_rows' ? '작업편의' : 'LOSS최소'; fileName += `_${suffix}`; } fileName += '.xlsx'; const blob = new Blob([wbout], { type: "application/octet-stream" }); setTimeout(() => { saveAs(blob, fileName); }, downloadCount * 500); downloadCount++; } }); }); if (downloadCount === 0) alert("저장할 데이터가 없습니다."); } catch (e) { console.error(e); alert("오류: " + e.message); } };
-            const getUnitWeight = (w, h, t) => { const dims = [parseInt(w), parseInt(h)].sort((a,b)=>b-a); const key = `${dims[0]}-${dims[1]}-${t}`; return UNIT_WEIGHT_DATA[key] || 0; };
+            const runAllDongs = () => { 
+                setIsCalculating(true);
+                setTimeout(() => { 
+                    const newResults = {}; let processedCount = 0; 
+                    dongs.forEach(dName => { 
+                        const dData = dongData[dName]; 
+                        if (!dData || !dData.gridData || dData.gridData.length === 0) return; 
+                        const items = parseItemsFromGrid(dData.gridData, dData.colMapping, dData.spec, dData.thickness); 
+                        if (items.length > 0) { 
+                            newResults[dName] = { min_rows: runAdvancedOptimization(items, 'min_rows'), min_loss: runAdvancedOptimization(items, 'min_loss') }; 
+                            processedCount++; 
+                        } 
+                    }); 
+                    if (processedCount > 0) { 
+                        setResultsByDong(newResults); 
+                        alert(`총 ${processedCount}개 동의 계산이 완료되었습니다.`); 
+                        setViewMode('result'); 
+                    } else { alert("계산할 데이터가 있는 동이 없습니다."); } 
+                    setIsCalculating(false);
+                }, 100); 
+            };
+
+            const handleManualToResult = (rows) => {
+                if (!rows || rows.length === 0) { alert("데이터가 없습니다."); return; }
+                
+                // Group by spec
+                const groups = {};
+                rows.forEach(row => {
+                     const dims = [parseInt(row.w), parseInt(row.h)].sort((a,b)=>b-a);
+                     const specKey = `${dims[0]}*${dims[1]} ${row.t}T`;
+                     
+                     if (!groups[specKey]) groups[specKey] = [];
+                     
+                     const parts = [];
+                     if (row.cuts) {
+                         row.cuts.forEach(c => {
+                             if (c.l && c.count) {
+                                 parts.push({
+                                     length: parseFloat(c.l),
+                                     count: parseInt(c.count),
+                                     marking: c.marking || '',
+                                     totalQty: parseInt(c.count) * parseInt(row.qty)
+                                 });
+                             }
+                         });
+                     }
+                     
+                     const usedLen = parts.reduce((sum, p) => sum + (p.length * p.count), 0);
+                     const remainder = parseFloat(row.l) - usedLen;
+                     
+                     groups[specKey].push({
+                         stockLength: parseFloat(row.l),
+                         qty: parseInt(row.qty),
+                         parts: parts,
+                         remainder: remainder
+                     });
+                });
+
+                const computedResults = {};
+                Object.keys(groups).forEach(specKey => {
+                    const plan = groups[specKey];
+                    let totalBars = 0;
+                    let totalLoss = 0;
+                    let totalStockLen = 0;
+                    
+                    plan.forEach(p => {
+                        totalBars += p.qty;
+                        totalLoss += (p.remainder * p.qty);
+                        totalStockLen += (p.stockLength * p.qty);
+                    });
+                    
+                    const lossRate = totalStockLen ? ((totalLoss / totalStockLen) * 100).toFixed(2) : 0;
+                    
+                    computedResults[specKey] = {
+                        plan: plan,
+                        summary: { totalBars, totalLoss, lossRate }
+                    };
+                });
+                
+                setResultsByDong(prev => ({
+                    ...prev,
+                    [currentDong]: {
+                        ...prev[currentDong],
+                        'manual_result': computedResults
+                    }
+                }));
+                
+                setViewMode('result');
+            };
+
             const exportToExcelBuffer = (targetDong, mode) => {
-                 const allResults = resultsByDong[targetDong];
+                const allResults = resultsByDong[targetDong];
                 if (!allResults) return null;
                 const results = allResults[mode];
                 if(!results) return null;
@@ -906,38 +1273,36 @@
                 const wb = XLSX.utils.book_new();
                 const specKeys = Object.keys(results).sort();
                 
-                const FONT_NORMAL = { name: "Malgun Gothic", sz: 11 };
-                const FONT_BOLD = { name: "Malgun Gothic", sz: 11, bold: true };
-                const TITLE_STYLE = { font: { name: "Malgun Gothic", sz: 15, bold: true }, alignment: { horizontal: "left" } };
-                const HEADER_STYLE = { fill: { fgColor: { rgb: "CCEEFF" } }, font: FONT_BOLD, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
-                const CELL_STYLE = { font: FONT_NORMAL, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
+                const FONT_NORMAL = { name: "Malgun Gothic", sz: 11, color: { rgb: "000000" } };
+                const FONT_BOLD = { name: "Malgun Gothic", sz: 11, bold: true, color: { rgb: "000000" } };
+                const TITLE_STYLE = { font: { name: "Malgun Gothic", sz: 15, bold: true, color: { rgb: "000000" } }, alignment: { horizontal: "left" } };
+                const AUTO_HEADER_STYLE = { fill: { fgColor: { rgb: "CCEEFF" } }, font: FONT_BOLD, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
                 const NOTE_STYLE = { fill: { fgColor: { rgb: "FFFF00" } }, font: FONT_BOLD, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
-                const SUM_STYLE_BLUE = { fill: { fgColor: { rgb: "CCEEFF" } }, font: FONT_BOLD, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
-                const STYLE_WARNING_LOSS = { fill: { fgColor: { rgb: "FFCCBC" } }, font: { name: "Malgun Gothic", sz: 11, color: { rgb: "FF0000" }, bold: true }, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
-                const STYLE_OTHER_SPEC = { fill: { fgColor: { rgb: "F5F5F5" } }, font: FONT_NORMAL, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
+                const AUTO_WARNING_STYLE = { fill: { fgColor: { rgb: "FFCCBC" } }, font: { name: "Malgun Gothic", sz: 11, color: { rgb: "FF0000" }, bold: true }, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
+                const AUTO_CELL_STYLE = { font: FONT_NORMAL, alignment: { horizontal: "center", vertical: "center" }, border: { top: {style:"thin"}, bottom: {style:"thin"}, left: {style:"thin"}, right: {style:"thin"} } };
+                const AUTO_TOTAL_STYLE = { ...AUTO_CELL_STYLE, fill: { fgColor: { rgb: "CCEEFF" } }, font: { ...AUTO_CELL_STYLE.font, bold: true } };
+                const AUTO_NON_STD_STYLE = { ...AUTO_CELL_STYLE, fill: { fgColor: { rgb: "FFF2CC" } } };
+                const AUTO_OTHER_SPEC_STYLE = { ...AUTO_CELL_STYLE, fill: { fgColor: { rgb: "F5F5F5" } } };
 
                 // 1. CP Sheet (Main)
                 const wsData = [];
-                // ... (Rows 0~4 setup logic remains same)
                 wsData.push([`※ ${projectInfo.company || '업체명'}(${projectInfo.site || '현장명'}) - ${targetDong}`]);
                 wsData.push([]);
                 const noteParts = []; if (projectInfo.isIronBanding) noteParts.push("철밴딩 동표기"); if (projectInfo.isUnder1Ton) noteParts.push("1톤 미만 밴딩"); if (projectInfo.note) noteParts.push(projectInfo.note);
-                wsData.push([noteParts.join(', ')]); 
+                wsData.push([noteParts.join(', ')]);
                 wsData.push([]);
                 const headerRow = ['순번', '두께', '장변', '단변', '길이(원본)', '수량', '길이(컷팅)', '컷팅수', '수량', '마킹', '본당 LOSS', '총 LOSS', '비고'];
                 wsData.push(headerRow);
 
                 let seq = 1;
-                const stockSummary = {}; 
+                const stockSummary = {};
                 const merges = [];
-                const rowStyles = {}; 
                 const rowSpecs = {}; 
                 let grandTotalStockQty = 0; let grandTotalCutQty = 0; let grandTotalLoss = 0;
-                merges.push({ s: {r:0, c:0}, e: {r:0, c:12} }); merges.push({ s: {r:2, c:0}, e: {r:2, c:12} }); 
+                merges.push({ s: {r:0, c:0}, e: {r:0, c:12} }); merges.push({ s: {r:2, c:0}, e: {r:2, c:12} });
 
-                // For Weight Stats & Cut Part Aggregation
-                const statsMap = {}; 
-                const cutPartMap = new Map(); 
+                const statsMap = {};
+                const cutPartMap = new Map();
 
                 specKeys.forEach(specKey => {
                     const { plan } = results[specKey];
@@ -949,48 +1314,50 @@
                     if (!statsMap[statKey]) { statsMap[statKey] = { t, w, h, inputLen: 0, inputWt: 0, prodLen: 0, prodWt: 0 }; }
 
                     let sortedPlan = [...plan];
-                    // *** PATCH: Excel Sort by Stock Length Descending ***
-                    sortedPlan.sort((a, b) => {
-                        if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
-                        if (mode === 'min_rows') return b.qty - a.qty;
-                        return a.remainder - b.remainder;
-                    });
+                    if (mode === 'manual' || mode === 'manual_result') {
+                         sortedPlan.sort((a,b) => b.stockLength - a.stockLength); 
+                    } else {
+                        sortedPlan.sort((a, b) => {
+                            if (b.stockLength !== a.stockLength) return b.stockLength - a.stockLength;
+                            if (mode === 'min_rows') return b.qty - a.qty;
+                            return a.remainder - b.remainder;
+                        });
+                    }
 
                     sortedPlan.forEach(group => {
-                        grandTotalStockQty += group.qty;
-                        grandTotalLoss += (group.remainder * group.qty);
+                        grandTotalStockQty += Number(group.qty || 0);
+                        grandTotalLoss += (Number(group.remainder || 0) * Number(group.qty || 0));
                         const summaryKey = `${t}|${w}|${h}|${group.stockLength}`;
                         if (!stockSummary[summaryKey]) stockSummary[summaryKey] = 0;
-                        stockSummary[summaryKey] += group.qty;
+                        stockSummary[summaryKey] += Number(group.qty || 0);
 
-                        // Stats Input
-                        const inL = group.stockLength * group.qty; 
+                        const inL = Number(group.stockLength || 0) * Number(group.qty || 0);
                         statsMap[statKey].inputLen += inL;
                         statsMap[statKey].inputWt += (inL / 1000 * unitWeight);
 
-                        let rowStyleType = 'rowNormal';
                         const groupStartRow = wsData.length;
-                        group.parts.forEach((part, pIdx) => {
-                            grandTotalCutQty += (part.count * group.qty);
-                            // Stats Production
-                            const outL = part.length * part.totalQty;
+                        const rowHeight = Math.max(1, (group.parts || []).length);
+                        for(let k=0; k < rowHeight; k++) {
+                            rowSpecs[groupStartRow + k] = isStandard ? 'std' : 'non_std';
+                        }
+
+                        (group.parts || []).forEach((part, pIdx) => {
+                            grandTotalCutQty += Number(part.totalQty || 0);
+                            const outL = Number(part.length || 0) * Number(part.totalQty || 0);
                             statsMap[statKey].prodLen += outL;
                             statsMap[statKey].prodWt += (outL / 1000 * unitWeight);
 
-                            // Aggregation Logic for Marking Table
                             const partKey = `${t}|${w}|${h}|${part.length}|${part.marking}`;
                             if(cutPartMap.has(partKey)) {
-                                cutPartMap.get(partKey).qty += part.totalQty;
+                                cutPartMap.get(partKey).qty += Number(part.totalQty || 0);
                             } else {
-                                cutPartMap.set(partKey, { t, w, h, length: part.length, qty: part.totalQty, marking: part.marking });
+                                cutPartMap.set(partKey, { t, w, h, length: part.length, qty: Number(part.totalQty || 0), marking: part.marking });
                             }
 
-                            rowStyles[wsData.length] = rowStyleType;
-                            rowSpecs[wsData.length] = isStandard ? 'std' : 'other'; 
                             const row = [];
                             if (pIdx === 0) { row.push(seq++, t, w, h, group.stockLength, Math.floor(group.qty)); } else { row.push(null, null, null, null, null, null); }
-                            row.push(part.length, part.count, Math.floor(part.totalQty), part.marking); 
-                            if (pIdx === 0) { row.push(group.remainder, group.remainder * group.qty); } else { row.push(null, null); }
+                            row.push(part.length, part.count, Math.floor(part.totalQty), part.marking);
+                            if (pIdx === 0) { row.push(group.remainder, Number(group.remainder) * Number(group.qty)); } else { row.push(null, null); }
                             row.push(''); wsData.push(row);
                         });
                         if (group.parts.length > 1) {
@@ -1004,12 +1371,12 @@
 
                 const totalRowIdx = wsData.length;
                 wsData.push(['합 계', null, null, null, null, Math.floor(grandTotalStockQty), '합 계', null, Math.floor(grandTotalCutQty), null, null, grandTotalLoss, null]);
-                merges.push({s:{r:totalRowIdx, c:0}, e:{r:totalRowIdx, c:4}}); merges.push({s:{r:totalRowIdx, c:6}, e:{r:totalRowIdx, c:7}}); 
+                merges.push({s:{r:totalRowIdx, c:0}, e:{r:totalRowIdx, c:4}}); merges.push({s:{r:totalRowIdx, c:6}, e:{r:totalRowIdx, c:7}});
 
-                // --- 2. Side Stats Table (Starts at Q6 / Row Index 5) ---
+                // --- 2. Side Stats Table ---
                 const statsTableData = [];
-                statsTableData.push(['중량 및 길이 집계표', null, null, null, null, null]); // Title Row
-                statsTableData.push(['규격', '투입 길이(m)', '생산 길이(m)', '투입 중량(kg)', '생산 중량(kg)', 'LOSS 중량(kg)']); // Header Row
+                statsTableData.push(['중량 및 길이 집계표', null, null, null, null, null]); 
+                statsTableData.push(['규격', '투입 길이(m)', '생산 길이(m)', '투입 중량(kg)', '생산 중량(kg)', 'LOSS 중량(kg)']); 
 
                 const sortedStatKeys = Object.keys(statsMap).sort((a,b) => {
                     const [t1, w1, h1] = a.split('|').map(Number);
@@ -1024,14 +1391,13 @@
                 let grandInLen = 0, grandProdLen = 0, grandInWt = 0, grandProdWt = 0;
                 sortedStatKeys.forEach(k => {
                     const d = statsMap[k];
-                    grandInLen += d.inputLen; grandProdLen += d.prodLen; grandInWt += d.inputWt; grandProdWt += d.prodWt;
+                    grandInLen += (d.inputLen || 0); grandProdLen += (d.prodLen || 0); grandInWt += (d.inputWt || 0); grandProdWt += (d.prodWt || 0);
                     const specStr = `${d.w}*${d.h}*${d.t}T`;
-                    const lossWt = d.inputWt - d.prodWt;
-                    statsTableData.push([specStr, (d.inputLen/1000).toFixed(3), (d.prodLen/1000).toFixed(3), d.inputWt.toFixed(3), d.prodWt.toFixed(3), lossWt.toFixed(3)]);
+                    const lossWt = (d.inputWt || 0) - (d.prodWt || 0);
+                    statsTableData.push([specStr, Number(((d.inputLen || 0)/1000).toFixed(3)), Number(((d.prodLen || 0)/1000).toFixed(3)), Number((d.inputWt || 0).toFixed(3)), Number((d.prodWt || 0).toFixed(3)), Number(lossWt.toFixed(3))]);
                 });
-                statsTableData.push(['전체 합계', (grandInLen/1000).toFixed(3), (grandProdLen/1000).toFixed(3), grandInWt.toFixed(3), grandProdWt.toFixed(3), (grandInWt - grandProdWt).toFixed(3)]);
+                statsTableData.push(['전체 합계', Number((grandInLen/1000).toFixed(3)), Number((grandProdLen/1000).toFixed(3)), Number(grandInWt.toFixed(3)), Number(grandProdWt.toFixed(3)), Number((grandInWt - grandProdWt).toFixed(3))]);
 
-                // Inject Stats Data into wsData at Column Q (Index 16), Starting Row 6 (Index 5)
                 const statsStartRow = 5; 
                 const statsStartCol = 16;
                 const statsEndRow = statsStartRow + statsTableData.length - 1;
@@ -1041,202 +1407,180 @@
                 statsTableData.forEach((rowItems, rIdx) => {
                     const targetRow = statsStartRow + rIdx;
                     if (!wsData[targetRow]) wsData[targetRow] = [];
-                    // Pad if needed
                     while (wsData[targetRow].length < statsStartCol) wsData[targetRow].push(null);
-                    // Insert items
-                    rowItems.forEach((val, cIdx) => {
-                        wsData[targetRow][statsStartCol + cIdx] = val;
-                    });
+                    rowItems.forEach((val, cIdx) => wsData[targetRow][statsStartCol + cIdx] = val);
                 });
 
-                // --- Bottom Tables (Raw & Marking) ---
-                let bottomStartRow = totalRowIdx + 3;
+                // --- Bottom Tables ---
+                let bottomStartRow = totalRowIdx + 4;
                 while(wsData.length < bottomStartRow) wsData.push([]);
-
-                // Left: Raw Material Table
+                
                 const rawStartRow = bottomStartRow;
                 if(!wsData[rawStartRow]) wsData[rawStartRow] = [];
-                wsData[rawStartRow][0] = '원본'; 
+                wsData[rawStartRow][0] = '원본';
                 merges.push({s:{r:rawStartRow, c:0}, e:{r:rawStartRow, c:4}});
                 
                 if(!wsData[rawStartRow+1]) wsData[rawStartRow+1] = [];
                 const rawHeaders = ['두께', '장변', '단변', '길이', '수량'];
                 rawHeaders.forEach((h,i) => wsData[rawStartRow+1][i] = h);
                 
-                const summaryKeysSummary = Object.keys(stockSummary).sort((a,b) => {
-                    const [t1, w1, h1, len1] = a.split('|').map(Number);
-                    const [t2, w2, h2, len2] = b.split('|').map(Number);
-                    if (w1===100 && h1===100 && !(w2===100 && h2===100)) return -1;
-                    if (!(w1===100 && h1===100) && w2===100 && h2===100) return 1;
-                    if (w1 !== w2) return w2 - w1;
-                    if (h1 !== h2) return h2 - h1;
-                    if (t1 !== t2) return t1 - t2;
-                    return len2 - len1;
-                });
-                
+                const sortedStockKeys = Object.keys(stockSummary).sort();
                 let rawTotalQtyCalc = 0;
-                const summaryRowsSpecType = {};
-                summaryKeysSummary.forEach((key, idx) => {
-                    const [t, w, h, len] = key.split('|');
+                sortedStockKeys.forEach((key, idx) => {
+                    const [t, w, h, l] = key.split('|');
                     const qty = stockSummary[key];
                     rawTotalQtyCalc += qty;
-                    const isStd = (w == '100' && h == '100');
                     const r = rawStartRow + 2 + idx;
                     if(!wsData[r]) wsData[r] = [];
-                    wsData[r][0] = t; wsData[r][1] = w; wsData[r][2] = h; wsData[r][3] = len; wsData[r][4] = Math.floor(qty);
-                    summaryRowsSpecType[r] = isStd ? 'std' : 'other';
+                    wsData[r][0]=t; wsData[r][1]=w; wsData[r][2]=h; wsData[r][3]=parseFloat(l); wsData[r][4]=stockSummary[key];
                 });
-                const rawEndRow = rawStartRow + 2 + summaryKeysSummary.length;
+
+                const rawEndRow = rawStartRow + 2 + sortedStockKeys.length;
                 if(!wsData[rawEndRow]) wsData[rawEndRow] = [];
                 wsData[rawEndRow][0] = '합계'; wsData[rawEndRow][4] = Math.floor(rawTotalQtyCalc);
                 merges.push({s:{r:rawEndRow, c:0}, e:{r:rawEndRow, c:3}});
-
-                // Right: Marking Table
-                const allCutParts = Array.from(cutPartMap.values());
-                allCutParts.sort((a, b) => {
+                
+                const prodStartRow = bottomStartRow;
+                if(!wsData[prodStartRow]) wsData[prodStartRow] = [];
+                wsData[prodStartRow][6] = '생산제품'; merges.push({s:{r:prodStartRow, c:6}, e:{r:prodStartRow, c:11}});
+                if(!wsData[prodStartRow+1]) wsData[prodStartRow+1] = [];
+                ['두께', '장변', '단변', '길이', '수량', '마킹'].forEach((h,i) => wsData[prodStartRow+1][6+i] = h);
+                
+                const sortedParts = Array.from(cutPartMap.values()).sort((a,b) => {
+                    const isA100 = (a.w == 100 && a.h == 100);
+                    const isB100 = (b.w == 100 && b.h == 100);
+                    if (isA100 && !isB100) return -1;
+                    if (!isA100 && isB100) return 1;
                     if (a.t !== b.t) return b.t - a.t;
                     if (a.w !== b.w) return b.w - a.w;
                     if (a.h !== b.h) return b.h - a.h;
                     if (b.length !== a.length) return b.length - a.length;
-                    return a.marking.localeCompare(b.marking);
+                    return String(a.marking).localeCompare(String(b.marking));
                 });
 
-                const markTitleRowIdx = bottomStartRow; 
-                const markColHeaderRowIdx = bottomStartRow + 1;
-                if(!wsData[markTitleRowIdx]) wsData[markTitleRowIdx] = [];
-                wsData[markTitleRowIdx][6] = '생산제품';
-                merges.push({s:{r:markTitleRowIdx, c:6}, e:{r:markTitleRowIdx, c:11}});
+                let prodTotalQtyCalc = 0;
+                let markRowIdx = prodStartRow + 2;
 
-                if(!wsData[markColHeaderRowIdx]) wsData[markColHeaderRowIdx] = [];
-                const markHeaders = ['두께', '장변', '단변', '길이', '수량', '마킹'];
-                markHeaders.forEach((h,i) => wsData[markColHeaderRowIdx][6+i] = h);
-
-                let markRowIdx = markColHeaderRowIdx + 1;
-                let markTotalQty = 0;
-                let markMergeStartRow = markRowIdx;
+                sortedParts.forEach((p, idx) => {
+                    const r = markRowIdx + idx;
+                    prodTotalQtyCalc += p.qty;
+                    if(!wsData[r]) wsData[r] = [];
+                    wsData[r][6]=p.t; wsData[r][7]=p.w; wsData[r][8]=p.h; wsData[r][9]=p.length; wsData[r][10]=p.qty; wsData[r][11]=p.marking;
+                });
                 
-                for(let i=0; i<allCutParts.length; i++) {
-                    const p = allCutParts[i];
-                    markTotalQty += p.qty;
-                    if (!wsData[markRowIdx]) wsData[markRowIdx] = [];
-                    
-                    wsData[markRowIdx][6] = p.t; wsData[markRowIdx][7] = p.w; wsData[markRowIdx][8] = p.h;
-                    wsData[markRowIdx][9] = p.length; wsData[markRowIdx][10] = Math.floor(p.qty); wsData[markRowIdx][11] = p.marking;
+                const prodEndRow = markRowIdx + sortedParts.length;
+                if(!wsData[prodEndRow]) wsData[prodEndRow] = [];
+                wsData[prodEndRow][6] = '합계'; wsData[prodEndRow][10] = Math.floor(prodTotalQtyCalc);
+                merges.push({s:{r:prodEndRow, c:6}, e:{r:prodEndRow, c:9}});
 
-                    const prevP = i > 0 ? allCutParts[i-1] : null;
-                    if (prevP && (prevP.t !== p.t || prevP.w !== p.w || prevP.h !== p.h)) {
-                        if (markRowIdx - 1 > markMergeStartRow) {
-                            merges.push({s:{r:markMergeStartRow, c:6}, e:{r:markRowIdx-1, c:6}});
-                            merges.push({s:{r:markMergeStartRow, c:7}, e:{r:markRowIdx-1, c:7}});
-                            merges.push({s:{r:markMergeStartRow, c:8}, e:{r:markRowIdx-1, c:8}});
-                        }
-                        markMergeStartRow = markRowIdx;
-                    }
-                    markRowIdx++;
-                }
-                if (markRowIdx - 1 > markMergeStartRow) {
-                    merges.push({s:{r:markMergeStartRow, c:6}, e:{r:markRowIdx-1, c:6}});
-                    merges.push({s:{r:markMergeStartRow, c:7}, e:{r:markRowIdx-1, c:7}});
-                    merges.push({s:{r:markMergeStartRow, c:8}, e:{r:markRowIdx-1, c:8}});
-                }
-                if (!wsData[markRowIdx]) wsData[markRowIdx] = [];
-                wsData[markRowIdx][6] = '합계'; wsData[markRowIdx][10] = Math.floor(markTotalQty);
-                merges.push({s:{r:markRowIdx, c:6}, e:{r:markRowIdx, c:9}});
-
-                const ws = XLSX.utils.aoa_to_sheet(wsData);
-                ws['!merges'] = merges;
-                // Add widths for columns N,O,P,Q,R,S,T,U,V
-                const colWidths = [8, 8, 8, 8, 12, 8, 8, 8, 8, 12, 15, 20, 10, 5, 5, 5, 20, 18, 18, 18, 18, 18]; 
-                ws['!cols'] = colWidths.map(w => ({wch: w}));
+                const sheet = XLSX.utils.aoa_to_sheet(wsData);
+                sheet['!merges'] = merges;
                 
-                const range = XLSX.utils.decode_range(ws['!ref']);
-                for (let R = range.s.r; R <= range.e.r; ++R) {
-                    for (let C = range.s.c; C <= range.e.c; ++C) {
+                const range = XLSX.utils.decode_range(sheet['!ref']);
+                for(let R = range.s.r; R <= range.e.r; ++R) {
+                    for(let C = range.s.c; C <= range.e.c; ++C) {
                         const cellRef = XLSX.utils.encode_cell({r: R, c: C});
-                        if (!ws[cellRef]) ws[cellRef] = { v: "", t: "s" };
+                        if (!sheet[cellRef]) sheet[cellRef] = { v: "", t: "s" };
                         
-                        let s = { ...CELL_STYLE };
+                        let s = { ...AUTO_CELL_STYLE };
                         const isMainTable = R <= totalRowIdx && C <= 12;
                         const isRawTable = R >= rawStartRow && C <= 4 && R <= rawEndRow;
-                        const isMarkTable = R >= markTitleRowIdx && C >= 6 && C <= 11 && R <= markRowIdx;
-                        // Stats Table: C 16~21, R 5 ~ statsEndRow
-                        const isStatsTable = R >= statsStartRow && R <= statsEndRow && C >= 16 && C <= 21;
+                        const isProdTable = R >= prodStartRow && R <= prodEndRow && C >= 6 && C <= 11;
+                        const isStatsTable = R >= statsStartRow && R <= statsEndRow && C >= 16;
 
-                        if (isMainTable) {
-                            if (R === 0) s = TITLE_STYLE;
-                            else if (R === 2) { 
-                                if (projectInfo.isIronBanding) s = NOTE_STYLE; 
-                                else s = { alignment: { horizontal: "left" } };
-                            }
-                            else if (R === 4) s = HEADER_STYLE;
-                            else if (R === totalRowIdx) s = { ...SUM_STYLE_BLUE };
-                            else if (R >= 5 && R < totalRowIdx) {
-                                if (rowSpecs[R] === 'other') s = { ...STYLE_OTHER_SPEC };
-                                if (C === 10) { 
-                                    const cellVal = ws[cellRef].v;
-                                    if (typeof cellVal === 'number' && cellVal >= 650) s = { ...STYLE_WARNING_LOSS };
+                        if (!isMainTable && !isRawTable && !isProdTable && !isStatsTable) {
+                             s.border = {}; 
+                        } else {
+                            if (isMainTable) {
+                                if (R === 0) s = TITLE_STYLE;
+                                else if (R === 2) { 
+                                    if (projectInfo.isIronBanding) s = NOTE_STYLE; 
+                                    else s = { font: FONT_NORMAL, alignment: { horizontal: "left" } };
                                 }
-                            }
-                            if (R === 1 || R === 3) s.border = {};
-                            if (C === 10 || C === 11) s.numFmt = "#,##0";
-                            if (C === 5 || C === 8) s.numFmt = "#,##0";
-                        } 
-                        else if (isRawTable) {
-                             if (R === rawStartRow) s = { ...HEADER_STYLE, fill: { fgColor: { rgb: "CCEEFF" } } };
-                             else if (R === rawStartRow + 1) s = HEADER_STYLE;
-                             else if (R === rawEndRow) s = SUM_STYLE_BLUE;
-                             else { 
-                                 if (summaryRowsSpecType[R] === 'other') s = { ...STYLE_OTHER_SPEC }; 
-                                 if (C === 4) s.numFmt = "#,##0"; // Raw Qty
-                             }
-                        }
-                        else if (isMarkTable) {
-                            if (R === markTitleRowIdx) s = { ...HEADER_STYLE, fill: { fgColor: { rgb: "CCEEFF" } } };
-                            else if (R === markColHeaderRowIdx) s = HEADER_STYLE;
-                            else if (R === markRowIdx) s = SUM_STYLE_BLUE;
-                            if (R > markColHeaderRowIdx && C === 10) s.numFmt = "#,##0";
-                        }
-                        else if (isStatsTable) {
-                            if (R === statsStartRow) s = { ...HEADER_STYLE, fill: { fgColor: { rgb: "CCEEFF" } } };
-                            else if (R === statsStartRow + 1) s = HEADER_STYLE;
-                            else if (R === statsEndRow) s = SUM_STYLE_BLUE;
-                            else s = { ...CELL_STYLE };
-                            if (R > statsStartRow && C >= 17) s.numFmt = "#,##0.000";
-                        }
-                        else { s.border = {}; }
+                                else if (R === 4) s = AUTO_HEADER_STYLE;
+                                else if (R === totalRowIdx) s = AUTO_TOTAL_STYLE;
+                                else if (R >= 5 && R < totalRowIdx) {
+                                    if (rowSpecs[R] === 'non_std') s = AUTO_NON_STD_STYLE;
+                                    else if (rowSpecs[R] === 'other_spec') s = AUTO_OTHER_SPEC_STYLE;
 
-                        ws[cellRef].s = s;
+                                    if (C === 10) { 
+                                        const cellVal = sheet[cellRef].v;
+                                        if (typeof cellVal === 'number' && cellVal >= 650) s = AUTO_WARNING_STYLE;
+                                    }
+                                }
+                                if (R === 1 || R === 3) s.border = {};
+                                if (C === 10 || C === 11 || C === 5 || C === 8) s.numFmt = "#,##0";
+                            } 
+                            else if (isRawTable) {
+                                 if (R === rawStartRow || R === rawStartRow + 1) s = AUTO_HEADER_STYLE;
+                                 else if (R === rawEndRow) s = AUTO_TOTAL_STYLE;
+                                 if (C === 4) s.numFmt = "#,##0";
+                            }
+                            else if (isProdTable) {
+                                if (R === prodStartRow || R === prodStartRow + 1) s = AUTO_HEADER_STYLE;
+                                else if (R === prodEndRow) s = AUTO_TOTAL_STYLE;
+                                if (R > prodStartRow + 1 && C === 10) s.numFmt = "#,##0";
+                            }
+                            else if (isStatsTable) {
+                                if (R === statsStartRow || R === statsStartRow + 1) s = AUTO_HEADER_STYLE;
+                                else if (R === statsEndRow) s = AUTO_TOTAL_STYLE;
+                                if (R > statsStartRow + 1 && C >= 17) s.numFmt = "#,##0.000";
+                            }
+                        }
+                        sheet[cellRef].s = s;
                     }
                 }
 
-                XLSX.utils.book_append_sheet(wb, ws, `CP_${targetDong}`);
-                return wb;
+                const manualWb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(manualWb, sheet, `CP_${targetDong}`);
+                return manualWb;
             };
 
-            const saveToFirebase = async () => {
-                if (!user) return alert("로그인이 필요합니다.");
-                const title = prompt("컷팅표 이름 입력:");
-                if (!title) return;
+            const handleExcelExport = (targetType, modeType) => { 
                 try {
-                    const { addDoc, collection, serverTimestamp } = window.FirebaseSDK;
-                    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                    const savedData = Object.keys(resultsByDong).map(key => ({ dong: key, results: resultsByDong[key] }));
-                    await addDoc(collection(dbRef.current, 'artifacts', appId, 'public', 'data', 'cuttingPlans'), { 
-                        title, isMultiDong: true, projectInfo, results: savedData, createdAt: serverTimestamp(), creatorId: user.uid 
+                    const wb = XLSX.utils.book_new();
+                    const targets = targetType === 'current' ? [currentDong] : dongs;
+                    let hasSheets = false;
+
+                    targets.forEach(dName => {
+                        const res = resultsByDong[dName];
+                        if(!res) return;
+                        
+                        const appendResult = (m) => {
+                            const resultWb = exportToExcelBuffer(dName, m);
+                            if(resultWb && resultWb.SheetNames && resultWb.SheetNames.length > 0) {
+                                let safeSheetName = `${dName}_${m==='min_rows'?'작업':(m==='min_loss'?'LOSS':'수동')}`.replace(/[\\/?*\[\]]/g, "").substring(0, 31);
+                                if(wb.SheetNames.includes(safeSheetName)) {
+                                    safeSheetName = safeSheetName.substring(0, 28) + "_" + Math.floor(Math.random()*99);
+                                }
+                                XLSX.utils.book_append_sheet(wb, resultWb.Sheets[resultWb.SheetNames[0]], safeSheetName);
+                                hasSheets = true;
+                            }
+                        };
+
+                        if(modeType === 'both') {
+                            if(res['min_rows']) appendResult('min_rows');
+                            if(res['min_loss']) appendResult('min_loss');
+                        } else {
+                            if(res[modeType]) appendResult(modeType);
+                        }
                     });
-                    alert("저장 완료");
-                } catch (e) { alert("저장 실패: " + e.message); }
+                    
+                    if(hasSheets) {
+                        const fileName = `${projectInfo.company || '업체명'}(${projectInfo.site || '현장명'})-${currentDong}.xlsx`;
+                        XLSX.writeFile(wb, fileName);
+                        setIsExcelModalOpen(false);
+                        alert("다운로드가 완료되었습니다.");
+                    } else {
+                        alert("저장할 데이터가 없거나 선택하신 모드에 대한 계산 결과가 없습니다.");
+                    }
+                } catch (error) {
+                    console.error(error);
+                    alert("엑셀 저장 중 오류가 발생했습니다: " + error.message);
+                }
             };
 
-            const deletePlan = async (id) => {
-                 if(!confirm('삭제합니까?')) return;
-                 try {
-                     const { deleteDoc, doc } = window.FirebaseSDK;
-                     const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                     await deleteDoc(doc(dbRef.current, 'artifacts', appId, 'public', 'data', 'cuttingPlans', id));
-                 } catch(e) { alert("삭제 실패: " + e.message); }
-            };
-
+            // Render
             return (
                 <div className="min-h-screen bg-gray-50 text-gray-900 font-sans flex">
                     <Sidebar viewMode={viewMode} setViewMode={setViewMode} projectInfo={projectInfo} setProjectInfo={setProjectInfo} />
@@ -1248,31 +1592,25 @@
                                 customStocks={customStocks} setCustomStocks={setCustomStocks} processGridData={processGridData} handlePaste={handlePaste}
                                 runAllDongs={runAllDongs} globalSettings={STANDARD_STOCKS}
                                 isUserStockMode={isUserStockMode} setIsUserStockMode={setIsUserStockMode} userStockList={userStockList} setUserStockList={setUserStockList}
+                                setViewMode={setViewMode}
+                                isCalculating={isCalculating}
                             />
                         )}
                         {viewMode === 'result' && (
                             <ResultView 
                                 currentDong={currentDong} dongs={dongs} setCurrentDong={setCurrentDong} addDong={addDong} deleteDong={deleteDong} renameDong={renameDong}
-                                resultsByDong={resultsByDong} runAllDongs={runAllDongs} openExcelModal={() => setIsExcelModalOpen(true)} saveToFirebase={saveToFirebase} setViewMode={setViewMode}
+                                resultsByDong={resultsByDong} runAllDongs={runAllDongs} openExcelModal={() => setIsExcelModalOpen(true)} setViewMode={setViewMode}
+                                setManualData={setManualData}
                             />
                         )}
-                        {viewMode === 'history' && (
-                            <div className="animate-fade-in">
-                                <h2 className="text-xl font-bold mb-4">저장된 목록</h2>
-                                <div className="grid gap-4">
-                                    {savedPlans.map(plan => (
-                                        <div key={plan.id} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex justify-between items-center">
-                                            <div>
-                                                <h3 className="font-bold text-lg">{plan.title}</h3>
-                                                <p className="text-sm text-gray-500">{new Date(plan.createdAt?.seconds * 1000).toLocaleString()}</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={()=>deletePlan(plan.id)} className="text-red-500 hover:bg-red-50 p-2 rounded"><Trash2/></button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
+                        {viewMode === 'manual' && (
+                            <ManualCPView
+                                dongs={dongs} currentDong={currentDong} setCurrentDong={setCurrentDong} addDong={addDong} deleteDong={deleteDong} renameDong={renameDong}
+                                projectInfo={projectInfo}
+                                manualData={manualData} setManualData={setManualData}
+                                onConvert={handleManualToResult}
+                                parsedItems={getCurrentData().parsedItems.length > 0 ? getCurrentData().parsedItems : parseItemsFromGrid(getCurrentData().gridData, getCurrentData().colMapping, getCurrentData().spec, getCurrentData().thickness)}
+                            />
                         )}
                     </div>
                     <ExcelExportModal isOpen={isExcelModalOpen} onClose={() => setIsExcelModalOpen(false)} onConfirm={handleExcelExport} dongs={dongs} />
