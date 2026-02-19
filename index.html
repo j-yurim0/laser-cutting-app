@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>스마트 컷팅 플랜 (Smart CP) - Ver 11.7.4</title>
+    <title>스마트 컷팅 플랜 (Smart CP) - Ver 11.9.1 (Final Stable)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -40,17 +40,28 @@
     <script type="text/babel">
         const { useState, useEffect, useRef, memo, useCallback, useMemo } = React;
 
-        // [설정] 구글 시트 탭 이름 (반드시 확인하세요!)
-        const SHEET_NAME = 'Sheet1';
-
+        // ==========================================
+        // 🚨 [설정] 구글 API 정보
+        const SHEET_NAME = '시트1'; // 만약 에러가 난다면 'Sheet1'로 변경해보세요.
         const CLIENT_ID = '791608320864-ro52gqaonn7ppkoib6due2m48sfv9969.apps.googleusercontent.com';
         const API_KEY = 'AIzaSyBoOVQF_WEEiIZqFIA89ET2Rvt95CUjzWk';
         const SPREADSHEET_ID = '1I0-XY4ZjhbjCBHEbZ36B8QSKb99CQk2aBHgBpBMGLWc';
         const DISCOVERY_DOC = 'https://sheets.googleapis.com/$discovery/rest?version=v4';
         const SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+        // ==========================================
 
-        // Icons
-        const IconWrapper = ({ children, className = "" }) => (<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
+        const SHEET_ROW_MAP = [
+            { row: 5, w: 50, h: 50, t: '2.1', l: 6000 },
+            { row: 7, w: 75, h: 75, t: '2.1', l: 6000 }, { row: 8, w: 75, h: 75, t: '2.1', l: 6600 }, { row: 9, w: 75, h: 75, t: '2.1', l: 7200 }, { row: 10, w: 75, h: 75, t: '2.1', l: 8000 },
+            { row: 12, w: 100, h: 50, t: '2.1', l: 5000 }, { row: 13, w: 100, h: 50, t: '2.1', l: 6000 }, { row: 14, w: 100, h: 50, t: '2.1', l: 6600 }, { row: 15, w: 100, h: 50, t: '2.1', l: 7200 }, { row: 16, w: 100, h: 50, t: '2.1', l: 8200 },
+            { row: 18, w: 100, h: 100, t: '2.1', l: 5000 }, { row: 19, w: 100, h: 100, t: '2.1', l: 6000 }, { row: 20, w: 100, h: 100, t: '2.1', l: 6600 }, { row: 21, w: 100, h: 100, t: '2.1', l: 7200 }, { row: 22, w: 100, h: 100, t: '2.1', l: 8000 },
+            { row: 24, w: 100, h: 100, t: '2.3', l: 5000 }, { row: 25, w: 100, h: 100, t: '2.3', l: 6000 }, { row: 26, w: 100, h: 100, t: '2.3', l: 7200 }, { row: 27, w: 100, h: 100, t: '2.3', l: 8000 },
+            { row: 29, w: 100, h: 100, t: '3.0', l: 5000 }, { row: 30, w: 100, h: 100, t: '3.0', l: 6000 }, { row: 31, w: 100, h: 100, t: '3.0', l: 7200 }, { row: 32, w: 100, h: 100, t: '3.0', l: 8000 },
+            { row: 34, w: 100, h: 100, t: '3.2', l: 6000 }, { row: 35, w: 100, h: 100, t: '3.2', l: 6200 }, { row: 36, w: 100, h: 100, t: '3.2', l: 7200 }, { row: 37, w: 100, h: 100, t: '3.2', l: 8000 }
+        ];
+
+        // --- Icons ---
+        const IconWrapper = ({ children, size = 20, className = "" }) => (<svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{children}</svg>);
         const Trash2 = (props) => <IconWrapper {...props}><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /><line x1="10" x2="10" y1="11" y2="17" /><line x1="14" x2="14" y1="11" y2="17" /></IconWrapper>;
         const Plus = (props) => <IconWrapper {...props}><path d="M5 12h14" /><path d="M12 5v14" /></IconWrapper>;
         const Calculator = (props) => <IconWrapper {...props}><rect width="16" height="20" x="4" y="2" rx="2" /><line x1="8" x2="16" y1="6" y2="6" /><line x1="16" x2="16" y1="14" y2="18" /><path d="M16 10h.01" /><path d="M12 10h.01" /><path d="M8 10h.01" /><path d="M12 14h.01" /><path d="M8 14h.01" /><path d="M12 18h.01" /><path d="M8 18h.01" /></IconWrapper>;
@@ -68,16 +79,83 @@
         const FilePdf = (props) => <IconWrapper {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><path d="M9 15h3a1.5 1.5 0 0 0 0-3H9v4" /><path d="M5 12v4" /><path d="M5 12h2" /><path d="M17 12h-3v4" /><path d="M17 14h-2" /></IconWrapper>;
         const Cloud = (props) => <IconWrapper {...props}><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></IconWrapper>;
 
-        const STOCK_ROWS = [5, 7, 8, 9, 10, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 24, 25, 26, 27, 29, 30, 31, 32, 34, 35, 36, 37];
+        // --- Constants & Data ---
         const STANDARD_STOCKS = { "default": [6000, 6600, 7200, 8000], "100x100": { "2.1": [6000, 6600, 7200, 8000], "2.3": [6000, 6600, 7200, 8000], "3.0": [6000, 6200, 7200, 8000], "3.2": [6000, 6200, 7200, 8000] }, "75x75": { "2.1": [6000, 6600, 7200, 8000], "2.3": [6000, 6600, 7200, 8000], "3.0": [6000, 6200, 7200, 8000], "3.2": [6000, 6200, 7200, 8000] }, "100x50": { "2.1": [6000, 6600, 7200, 8200], "2.3": [6000, 6600, 7200, 8200], "3.0": [6000, 6600, 7200, 8200], "3.2": [6000, 6600, 7200, 8200] }, "50x50": { "2.1": [6000], "2.3": [6000], "3.0": [6000], "3.2": [6000] } };
         const UNIT_WEIGHT_DATA = { "100-100-3.2": 9.52, "100-100-3.0": 8.96, "100-100-2.3": 6.95, "100-100-2.1": 6.37, "100-50-2.1": 4.72, "75-75-2.1": 4.72, "50-50-2.1": 3.07 };
-        const getUnitWeight = (w, h, t) => { const dims = [parseInt(w), parseInt(h)].sort((a, b) => b - a); const key = `${dims[0]}-${dims[1]}-${t}`; return UNIT_WEIGHT_DATA[key] || 0; };
-        const parseItemsFromGrid = (gridData, colMapping, defaultSpec, defaultThickness) => { const lenIdx = Object.keys(colMapping).find(k => colMapping[k] === 'length'); const qtyIdx = Object.keys(colMapping).find(k => colMapping[k] === 'qty'); if (!lenIdx || !qtyIdx) return []; const wIdx = Object.keys(colMapping).find(k => colMapping[k] === 'width'); const hIdx = Object.keys(colMapping).find(k => colMapping[k] === 'height'); const tIdx = Object.keys(colMapping).find(k => colMapping[k] === 'thickness'); const markIdx = Object.keys(colMapping).find(k => colMapping[k] === 'marking'); let items = []; let rowCounter = 0; gridData.forEach((row) => { let rawLen = row[lenIdx]?.trim().replace(/,/g, ''); let rawQty = row[qtyIdx]?.trim().replace(/폰/g, '').replace(/,/g, ''); if (!rawLen || !rawQty) return; let length = parseFloat(rawLen); const qty = parseInt(rawQty, 10); if (isNaN(length) || isNaN(qty) || qty <= 0) return; if (length < 20) length = Math.round(length * 1000); else length = Math.round(length); let w = wIdx ? row[wIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let h = hIdx ? row[hIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let t = tIdx ? row[tIdx]?.trim().replace(/[^0-9.]/g, '') : ''; let marking = markIdx ? (row[markIdx]?.trim() || '') : ''; if (!w) w = defaultSpec.split('*')[0] || '100'; if (!h) h = defaultSpec.split('*')[1] || '100'; if (!t) t = defaultThickness; items.push({ id: rowCounter++, length, qty, marking, specKey: `${[parseInt(w), parseInt(h)].sort((a, b) => b - a).join('*')} ${t}T`, w: parseInt(w), h: parseInt(h), t }); }); return items; };
-        const SHEET_ROW_MAP = [ { row: 5, w: 50, h: 50, t: '2.1', l: 6000 }, { row: 7, w: 75, h: 75, t: '2.1', l: 6000 }, { row: 8, w: 75, h: 75, t: '2.1', l: 6600 }, { row: 9, w: 75, h: 75, t: '2.1', l: 7200 }, { row: 10, w: 75, h: 75, t: '2.1', l: 8000 }, { row: 12, w: 100, h: 50, t: '2.1', l: 5000 }, { row: 13, w: 100, h: 50, t: '2.1', l: 6000 }, { row: 14, w: 100, h: 50, t: '2.1', l: 6600 }, { row: 15, w: 100, h: 50, t: '2.1', l: 7200 }, { row: 16, w: 100, h: 50, t: '2.1', l: 8200 }, { row: 18, w: 100, h: 100, t: '2.1', l: 5000 }, { row: 19, w: 100, h: 100, t: '2.1', l: 6000 }, { row: 20, w: 100, h: 100, t: '2.1', l: 6600 }, { row: 21, w: 100, h: 100, t: '2.1', l: 7200 }, { row: 22, w: 100, h: 100, t: '2.1', l: 8000 }, { row: 24, w: 100, h: 100, t: '2.3', l: 5000 }, { row: 25, w: 100, h: 100, t: '2.3', l: 6000 }, { row: 26, w: 100, h: 100, t: '2.3', l: 7200 }, { row: 27, w: 100, h: 100, t: '2.3', l: 8000 }, { row: 29, w: 100, h: 100, t: '3.0', l: 5000 }, { row: 30, w: 100, h: 100, t: '3.0', l: 6000 }, { row: 31, w: 100, h: 100, t: '3.0', l: 7200 }, { row: 32, w: 100, h: 100, t: '3.0', l: 8000 }, { row: 34, w: 100, h: 100, t: '3.2', l: 6000 }, { row: 35, w: 100, h: 100, t: '3.2', l: 6200 }, { row: 36, w: 100, h: 100, t: '3.2', l: 7200 }, { row: 37, w: 100, h: 100, t: '3.2', l: 8000 } ];
+        
+        const getUnitWeight = (w, h, t) => { 
+            const dims = [parseInt(w), parseInt(h)].sort((a, b) => b - a); 
+            const key = `${dims[0]}-${dims[1]}-${t}`; 
+            return UNIT_WEIGHT_DATA[key] || 0; 
+        };
+        
+        // 🚨 흰 화면 방지 (빈 칸 데이터 안전하게 파싱)
+        const parseItemsFromGrid = (gridData, colMapping, defaultSpec, defaultThickness) => { 
+            if (!gridData || !colMapping) return [];
+            
+            const lenIdx = Object.keys(colMapping).find(k => colMapping[k] === 'length'); 
+            const qtyIdx = Object.keys(colMapping).find(k => colMapping[k] === 'qty'); 
+            
+            if (lenIdx === undefined || qtyIdx === undefined) return []; 
+            
+            const wIdx = Object.keys(colMapping).find(k => colMapping[k] === 'width'); 
+            const hIdx = Object.keys(colMapping).find(k => colMapping[k] === 'height'); 
+            const tIdx = Object.keys(colMapping).find(k => colMapping[k] === 'thickness'); 
+            const markIdx = Object.keys(colMapping).find(k => colMapping[k] === 'marking'); 
+            
+            let items = []; 
+            let rowCounter = 0; 
+            
+            gridData.forEach((row) => { 
+                if (!row) return;
+                let rawLenStr = row[lenIdx] !== undefined ? String(row[lenIdx]) : '';
+                let rawQtyStr = row[qtyIdx] !== undefined ? String(row[qtyIdx]) : '';
+                
+                let rawLen = rawLenStr.trim().replace(/,/g, ''); 
+                let rawQty = rawQtyStr.trim().replace(/폰/g, '').replace(/,/g, ''); 
+                if (!rawLen || !rawQty) return; 
+                
+                let length = parseFloat(rawLen); 
+                const qty = parseInt(rawQty, 10); 
+                if (isNaN(length) || isNaN(qty) || qty <= 0) return; 
+                if (length < 20) length = Math.round(length * 1000); else length = Math.round(length); 
+                
+                let w = wIdx !== undefined && row[wIdx] !== undefined ? String(row[wIdx]).trim().replace(/[^0-9.]/g, '') : ''; 
+                let h = hIdx !== undefined && row[hIdx] !== undefined ? String(row[hIdx]).trim().replace(/[^0-9.]/g, '') : ''; 
+                let t = tIdx !== undefined && row[tIdx] !== undefined ? String(row[tIdx]).trim().replace(/[^0-9.]/g, '') : ''; 
+                let marking = markIdx !== undefined && row[markIdx] !== undefined ? String(row[markIdx]).trim() : ''; 
+                
+                if (!w) w = defaultSpec.split('*')[0] || '100'; 
+                if (!h) h = defaultSpec.split('*')[1] || '100'; 
+                if (!t) t = defaultThickness; 
+                
+                const dims = [parseInt(w), parseInt(h)].sort((a, b) => b - a); 
+                const specKey = `${dims[0]}*${dims[1]} ${t}T`; 
+                items.push({ id: rowCounter++, length, qty, marking, specKey, w: dims[0], h: dims[1], t: t }); 
+            }); 
+            return items; 
+        };
 
+        // --- Components ---
         const ModeSelector = ({ dongs, selectedModes, onModeChange }) => (
             <div className="max-h-60 overflow-y-auto border rounded p-2 bg-gray-50">
-                <table className="w-full text-xs"><thead><tr><th className="text-left p-1">동 이름</th><th className="text-left p-1">버전 선택</th></tr></thead><tbody>{dongs.map(dong => (<tr key={dong} className="border-b last:border-0"><td className="p-2 font-bold">{dong}</td><td className="p-1"><select className="w-full p-1 border rounded" value={selectedModes[dong] || 'min_rows'} onChange={(e) => onModeChange(dong, e.target.value)}><option value="min_rows">작업 편의</option><option value="min_loss">LOSS 최소화</option><option value="manual_result">수동 결과</option></select></td></tr>))}</tbody></table>
+                <table className="w-full text-xs">
+                    <thead><tr><th className="text-left p-1">동 이름</th><th className="text-left p-1">버전 선택</th></tr></thead>
+                    <tbody>
+                        {dongs.map(dong => (
+                            <tr key={dong} className="border-b last:border-0">
+                                <td className="p-2 font-bold">{dong}</td>
+                                <td className="p-1">
+                                    <select className="w-full p-1 border rounded" value={selectedModes[dong] || 'min_rows'} onChange={(e) => onModeChange(dong, e.target.value)}>
+                                        <option value="min_rows">작업 편의</option>
+                                        <option value="min_loss">LOSS 최소화</option>
+                                        <option value="manual_result">수동 결과</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
         );
 
@@ -103,16 +181,38 @@
 
         const ExcelExportModal = ({ isOpen, onClose, onConfirm, dongs }) => {
             if (!isOpen) return null;
-            const [targetType, setTargetType] = useState('current'); const [selectedModes, setSelectedModes] = useState(dongs.reduce((acc, d) => ({ ...acc, [d]: 'min_rows' }), {})); const [singleMode, setSingleMode] = useState('min_rows');
-            const handleConfirm = () => { if (targetType === 'current') onConfirm('current', { mode: singleMode }); else onConfirm('all', { modeMap: selectedModes }); };
+            const [targetType, setTargetType] = useState('current'); 
+            const [selectedModes, setSelectedModes] = useState(dongs.reduce((acc, d) => ({ ...acc, [d]: 'min_rows' }), {})); 
+            const [singleMode, setSingleMode] = useState('min_rows');
+            
+            const handleConfirm = () => { 
+                if (targetType === 'current') onConfirm('current', { mode: singleMode }); 
+                else onConfirm('all', { modeMap: selectedModes }); 
+            };
+            
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 modal-fade-in relative">
                         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><FileDown className="text-green-600" /> 엑셀 다운로드</h3>
                         <div className="space-y-6">
-                            <div><label className="block text-sm font-bold text-gray-700 mb-2">저장 대상</label><div className="grid grid-cols-2 gap-2"><button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'current' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button><button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'all' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button></div></div>
-                            <div><label className="block text-sm font-bold text-gray-700 mb-2">저장 버전 설정</label>{targetType === 'current' ? (<select className="w-full p-2 border rounded" value={singleMode} onChange={(e) => setSingleMode(e.target.value)}><option value="min_rows">① 작업 편의</option><option value="min_loss">② LOSS 최소화</option><option value="manual_result">③ 수동 결과</option><option value="both">④ 자동 계산 (작업+LOSS)</option></select>) : (<ModeSelector dongs={dongs} selectedModes={selectedModes} onModeChange={(d, m) => setSelectedModes(p => ({ ...p, [d]: m }))} />)}</div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 대상</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'current' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button>
+                                    <button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'all' ? 'border-green-500 bg-green-50 text-green-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-bold text-gray-700 mb-2">저장 버전 설정</label>
+                                {targetType === 'current' ? (
+                                    <select className="w-full p-2 border rounded" value={singleMode} onChange={(e) => setSingleMode(e.target.value)}>
+                                        <option value="min_rows">① 작업 편의</option><option value="min_loss">② LOSS 최소화</option><option value="manual_result">③ 수동 결과</option><option value="both">④ 자동 계산 (작업+LOSS)</option>
+                                    </select>
+                                ) : (
+                                    <ModeSelector dongs={dongs} selectedModes={selectedModes} onModeChange={(d, m) => setSelectedModes(p => ({ ...p, [d]: m }))} />
+                                )}
+                            </div>
                         </div>
                         <button onClick={handleConfirm} className="w-full mt-8 bg-green-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2">다운로드 시작</button>
                     </div>
@@ -122,17 +222,44 @@
 
         const StockDeductModal = ({ isOpen, onClose, onConfirm, dongs, isLoggedIn, handleLogin }) => {
             if (!isOpen) return null;
-            const [targetType, setTargetType] = useState('current'); const [selectedModes, setSelectedModes] = useState(dongs.reduce((acc, d) => ({ ...acc, [d]: 'min_rows' }), {})); const [singleMode, setSingleMode] = useState('min_rows');
-            const handleConfirm = () => { if (targetType === 'current') onConfirm('current', { mode: singleMode }); else onConfirm('all', { modeMap: selectedModes }); };
+            const [targetType, setTargetType] = useState('current'); 
+            const [selectedModes, setSelectedModes] = useState(dongs.reduce((acc, d) => ({ ...acc, [d]: 'min_rows' }), {})); 
+            const [singleMode, setSingleMode] = useState('min_rows');
+            
+            const handleConfirm = () => { 
+                if (targetType === 'current') onConfirm('current', { mode: singleMode }); 
+                else onConfirm('all', { modeMap: selectedModes }); 
+            };
+            
             return (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-96 modal-fade-in relative">
                         <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"><X size={20} /></button>
                         <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Cloud className="text-red-500" /> 재고 차감 (구글 시트)</h3>
-                        {!isLoggedIn ? (<div className="text-center py-6"><p className="text-sm text-gray-500 mb-4">로그인이 필요합니다.</p><button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">구글 로그인</button></div>) : (
+                        {!isLoggedIn ? (
+                            <div className="text-center py-6">
+                                <p className="text-sm text-gray-500 mb-4">로그인이 필요합니다.</p>
+                                <button onClick={handleLogin} className="bg-blue-600 text-white px-4 py-2 rounded-lg font-bold">구글 로그인</button>
+                            </div>
+                        ) : (
                             <div className="space-y-6">
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">차감 대상</label><div className="grid grid-cols-2 gap-2"><button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'current' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button><button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'all' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button></div></div>
-                                <div><label className="block text-sm font-bold text-gray-700 mb-2">차감 버전 설정</label>{targetType === 'current' ? (<select className="w-full p-2 border rounded" value={singleMode} onChange={(e) => setSingleMode(e.target.value)}><option value="min_rows">① 작업 편의</option><option value="min_loss">② LOSS 최소화</option><option value="manual_result">③ 수동 결과</option></select>) : (<ModeSelector dongs={dongs} selectedModes={selectedModes} onModeChange={(d, m) => setSelectedModes(p => ({ ...p, [d]: m }))} />)}</div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">차감 대상</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button onClick={() => setTargetType('current')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'current' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}>현재 동만</button>
+                                        <button onClick={() => setTargetType('all')} className={`p-3 rounded-lg border text-sm font-bold transition ${targetType === 'all' ? 'border-red-500 bg-red-50 text-red-700' : 'border-gray-200 hover:bg-gray-50'}`}>전체 동</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">차감 버전 설정</label>
+                                    {targetType === 'current' ? (
+                                        <select className="w-full p-2 border rounded" value={singleMode} onChange={(e) => setSingleMode(e.target.value)}>
+                                            <option value="min_rows">① 작업 편의</option><option value="min_loss">② LOSS 최소화</option><option value="manual_result">③ 수동 결과</option>
+                                        </select>
+                                    ) : (
+                                        <ModeSelector dongs={dongs} selectedModes={selectedModes} onModeChange={(d, m) => setSelectedModes(p => ({ ...p, [d]: m }))} />
+                                    )}
+                                </div>
                                 <button onClick={handleConfirm} className="w-full mt-8 bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-red-700 transition">차감 실행</button>
                             </div>
                         )}
@@ -144,9 +271,10 @@
         const Sidebar = memo(({ viewMode, setViewMode, projectInfo, setProjectInfo, isNoDongMode, setIsNoDongMode }) => {
             const handleTextChange = useCallback((e, f) => setProjectInfo(p => ({ ...p, [f]: e.target.value })), [setProjectInfo]);
             const handleCheckChange = useCallback((e, f) => setProjectInfo(p => ({ ...p, [f]: e.target.checked })), [setProjectInfo]);
+            
             return (
                 <div id="sidebar" className="w-64 bg-white border-r h-screen flex flex-col fixed left-0 top-0 z-30 print:hidden">
-                    <div className="p-6 border-b"><h1 className="text-xl font-bold flex items-center gap-2 text-blue-700"><Calculator /> Smart CP</h1><p className="text-xs text-gray-400 mt-1">Ver 11.7.4</p></div>
+                    <div className="p-6 border-b"><h1 className="text-xl font-bold flex items-center gap-2 text-blue-700"><Calculator /> Smart CP</h1><p className="text-xs text-gray-400 mt-1">Ver 11.9.1 (Stable)</p></div>
                     <div className="p-4 space-y-4 flex-1 overflow-y-auto">
                         <div className="space-y-2"><label className="text-xs font-bold text-gray-500">프로젝트 정보</label>
                             <input className="w-full p-2 border rounded text-sm bg-gray-50" placeholder="업체명" value={projectInfo.company} onChange={e => handleTextChange(e, 'company')} />
@@ -183,10 +311,11 @@
             </div>
         );
 
-        // --- Manual CP View (Enhanced) ---
+        // --- Manual CP View (Enhanced Nav) ---
         const ManualCPView = ({ dongs, currentDong, setCurrentDong, addDong, deleteDong, renameDong, projectInfo, manualData, setManualData, parsedItems, openCopyModal, isNoDongMode }) => {
             const rows = manualData[currentDong] || [];
             const [hideEmpty, setHideEmpty] = useState(false);
+            
             const updateRows = (newRows) => { setManualData(prev => ({ ...prev, [currentDong]: newRows })); };
             const addStockRow = () => { const lastRow = rows.length > 0 ? rows[rows.length - 1] : { t: '2.1', w: '100', h: '100', l: 6000, qty: 1 }; const newRow = { id: Date.now(), t: lastRow.t, w: lastRow.w, h: lastRow.h, l: lastRow.l, qty: 1, cuts: Array(8).fill().map(() => ({ l: '', count: '', marking: '' })) }; updateRows([...rows, newRow]); };
             const handleStockChange = (rIdx, field, val) => { const newRows = [...rows]; newRows[rIdx] = { ...newRows[rIdx], [field]: val }; updateRows(newRows); };
@@ -195,55 +324,50 @@
             const removeAllRows = () => { if (confirm('모든 데이터를 삭제하시겠습니까?')) { updateRows([]); } };
             const sortRowsByLength = () => { const newRows = [...rows].sort((a, b) => { if (a.t !== b.t) return parseFloat(b.t) - parseFloat(a.t); if (a.w !== b.w) return parseFloat(b.w) - parseFloat(a.w); if (a.h !== b.h) return parseFloat(b.h) - parseFloat(a.h); return b.l - a.l; }); updateRows(newRows); };
             
-            // --- Excel Style Navigation ---
+            // 🚨 엑셀 스타일 방향키 이동 (완벽 수정)
             const handleKeyDown = (e, rIdx, type, cIdx, field) => {
-                const keys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
-                if (!keys.includes(e.key)) return;
-                
-                e.preventDefault();
-                
+                if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+                e.preventDefault(); 
                 let targetId = null;
 
-                // 1. 좌우 이동 (같은 줄에서 칸만 이동)
                 if (e.key === 'ArrowRight') {
                     if (type === 'stock') {
-                        if (field === 't') targetId = `s-${rIdx}-w`;
-                        else if (field === 'w') targetId = `s-${rIdx}-h`;
-                        else if (field === 'h') targetId = `s-${rIdx}-l`;
-                        else if (field === 'l') targetId = `s-${rIdx}-qty`;
-                        else if (field === 'qty') targetId = `c-${rIdx}-0-l`; // 원본수량 -> 첫 컷팅 길이
-                    } else if (type === 'cut') {
-                        if (field === 'l') targetId = `c-${rIdx}-${cIdx}-count`;
-                        else if (field === 'count') targetId = `c-${rIdx}-${cIdx}-marking`;
-                        else if (field === 'marking') {
-                            // 마킹 -> 다음 컷팅 길이 (같은 줄)
-                            if (cIdx < 7) targetId = `c-${rIdx}-${cIdx + 1}-l`;
-                        }
+                        const fields = ['t','w','h','l','qty'];
+                        const fIdx = fields.indexOf(field);
+                        if (fIdx < 4) targetId = `s-${rIdx}-${fields[fIdx+1]}`;
+                        else targetId = `c-${rIdx}-0-l`; // 수량 -> 첫번째 컷팅 길이
+                    } else {
+                        const fields = ['l', 'count', 'marking'];
+                        const fIdx = fields.indexOf(field);
+                        if (fIdx < 2) targetId = `c-${rIdx}-${cIdx}-${fields[fIdx+1]}`; // 옆칸 이동
+                        else if (cIdx < 7) targetId = `c-${rIdx}-${cIdx+1}-l`; // 마킹 -> 다음줄 길이
                     }
                 } else if (e.key === 'ArrowLeft') {
                     if (type === 'stock') {
-                        if (field === 'w') targetId = `s-${rIdx}-t`;
-                        else if (field === 'h') targetId = `s-${rIdx}-w`;
-                        else if (field === 'l') targetId = `s-${rIdx}-h`;
-                        else if (field === 'qty') targetId = `s-${rIdx}-l`;
-                    } else if (type === 'cut') {
-                        if (field === 'count') targetId = `c-${rIdx}-${cIdx}-l`;
-                        else if (field === 'marking') targetId = `c-${rIdx}-${cIdx}-count`;
-                        else if (field === 'l') {
-                            if (cIdx === 0) targetId = `s-${rIdx}-qty`; // 첫 컷팅 -> 원본 수량
-                            else targetId = `c-${rIdx}-${cIdx - 1}-marking`; // 이전 컷팅 마킹
-                        }
+                        const fields = ['t','w','h','l','qty'];
+                        const fIdx = fields.indexOf(field);
+                        if (fIdx > 0) targetId = `s-${rIdx}-${fields[fIdx-1]}`;
+                    } else {
+                        const fields = ['l', 'count', 'marking'];
+                        const fIdx = fields.indexOf(field);
+                        if (fIdx > 0) targetId = `c-${rIdx}-${cIdx}-${fields[fIdx-1]}`; // 왼쪽 칸 이동
+                        else if (cIdx > 0) targetId = `c-${rIdx}-${cIdx-1}-marking`; // 이전줄 마킹
+                        else targetId = `s-${rIdx}-qty`; // 첫 컷팅 길이 -> 원본 수량
                     }
-                }
-                // 2. 상하 이동 (같은 칸 유지)
-                else if (e.key === 'ArrowDown') {
-                    const nextR = Math.min(rows.length - 1, rIdx + 1);
-                    if (type === 'stock') targetId = `s-${nextR}-${field}`;
-                    else targetId = `c-${nextR}-${cIdx}-${field}`;
+                } else if (e.key === 'ArrowDown') {
+                    if (type === 'stock') {
+                        targetId = `s-${Math.min(rows.length-1, rIdx+1)}-${field}`;
+                    } else {
+                        if (cIdx < 7) targetId = `c-${rIdx}-${cIdx+1}-${field}`;
+                        else if (rIdx < rows.length-1) targetId = `c-${rIdx+1}-0-${field}`;
+                    }
                 } else if (e.key === 'ArrowUp') {
-                    const prevR = Math.max(0, rIdx - 1);
-                    if (type === 'stock') targetId = `s-${prevR}-${field}`;
-                    else targetId = `c-${prevR}-${cIdx}-${field}`;
+                     if (type === 'stock') {
+                        targetId = `s-${Math.max(0, rIdx-1)}-${field}`;
+                    } else {
+                        if (cIdx > 0) targetId = `c-${rIdx}-${cIdx-1}-${field}`;
+                        else if (rIdx > 0) targetId = `c-${rIdx-1}-7-${field}`;
+                    }
                 }
 
                 if (targetId) {
@@ -273,7 +397,7 @@
                                 const cutLen = parseFloat(cut.l);
                                 const totalCutCount = parseInt(cut.count) * parseInt(row.qty || 0);
                                 const cutMarking = cut.marking ? String(cut.marking).trim() : '';
-                                const key = `${row.t}|${row.w}|${row.h}|${cutLen}|${cutMarking}`;
+                                const key = `${row.t || ''}|${row.w || ''}|${row.h || ''}|${cutLen}|${cutMarking}`;
                                 if (statusMap[key]) { statusMap[key].used += totalCutCount; } 
                                 else { statusMap[key] = { t: row.t, w: row.w, h: row.h, length: cutLen, marking: cutMarking, required: 0, used: totalCutCount, isExtra: true }; }
                             }
@@ -305,8 +429,11 @@
                                         const visibleCuts = hideEmpty ? cuts.filter(c => c.l && c.count) : cuts;
                                         const renderCuts = visibleCuts.length > 0 ? visibleCuts : (hideEmpty ? [] : cuts);
                                         const rowSpan = Math.max(1, renderCuts.length);
-                                        const usedLength = cuts.reduce((acc, c) => acc + (parseFloat(c.l || 0) * parseFloat(c.count || 0)), 0);
-                                        const lossPerBar = row.l - usedLength;
+                                        
+                                        const stockLength = parseFloat(row.l) || 0;
+                                        const usedLength = cuts.reduce((acc, c) => acc + ((parseFloat(c.l) || 0) * (parseFloat(c.count) || 0)), 0);
+                                        const lossPerBar = stockLength - usedLength;
+                                        
                                         return (
                                             <React.Fragment key={row.id || rIdx}>
                                                 {renderCuts.map((cut, cIdx) => {
@@ -314,17 +441,52 @@
                                                     const cutQty = (parseInt(cut.count) * parseInt(row.qty)) || '';
                                                     return (
                                                         <tr key={cIdx} className="border-b border-gray-200 hover:bg-gray-50 h-8">
-                                                            {isFirst && (<><td rowSpan={rowSpan} className="border bg-yellow-100 font-bold relative group">{rIdx + 1}<button onClick={() => removeStockRow(rIdx)} className="absolute left-0 top-0 text-red-400 opacity-0 group-hover:opacity-100 p-0.5"><Trash2 size={10} /></button></td>
-                                                                <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input id={`s-${rIdx}-t`} className="input-cell bg-yellow-50" value={row.t} onChange={e => handleStockChange(rIdx, 't', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 't')} /></td>
-                                                                <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input id={`s-${rIdx}-w`} className="input-cell bg-yellow-50" value={row.w} onChange={e => handleStockChange(rIdx, 'w', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'w')} /></td>
-                                                                <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input id={`s-${rIdx}-h`} className="input-cell bg-yellow-50" value={row.h} onChange={e => handleStockChange(rIdx, 'h', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'h')} /></td>
-                                                                <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input id={`s-${rIdx}-l`} type="number" className="input-cell bg-yellow-50 font-bold" value={row.l} onChange={e => handleStockChange(rIdx, 'l', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'l')} /></td>
-                                                                <td rowSpan={rowSpan} className="border bg-yellow-50 p-0"><input id={`s-${rIdx}-qty`} type="number" className="input-cell bg-yellow-50" value={row.qty} onChange={e => handleStockChange(rIdx, 'qty', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'qty')} /></td></>)}
-                                                            <td className="border p-0"><input id={`c-${rIdx}-${cIdx}-l`} type="number" className="input-cell" value={cut.l} onChange={e => handleCutChange(rIdx, cuts.indexOf(cut), 'l', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'l')} /></td>
-                                                            <td className="border p-0"><input id={`c-${rIdx}-${cIdx}-count`} type="number" className="input-cell" value={cut.count} onChange={e => handleCutChange(rIdx, cuts.indexOf(cut), 'count', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'count')} /></td>
-                                                            <td className="border bg-gray-50 text-gray-500">{cutQty ? cutQty.toLocaleString() : ''}</td>
-                                                            <td className="border p-0"><input id={`c-${rIdx}-${cIdx}-marking`} className="input-cell text-left px-1" value={cut.marking} onChange={e => handleCutChange(rIdx, cuts.indexOf(cut), 'marking', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'marking')} /></td>
-                                                            {isFirst && (<><td rowSpan={rowSpan} className={`border font-bold ${lossPerBar >= 650 ? 'text-blue-600' : (lossPerBar < 150 ? 'text-red-500' : 'text-gray-700')}`}>{lossPerBar.toLocaleString()}</td><td rowSpan={rowSpan} className="border text-gray-600">{(lossPerBar * row.qty).toLocaleString()}</td><td rowSpan={rowSpan} className="border"></td></>)}
+                                                            {isFirst && (
+                                                                <>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-100 font-bold relative group">
+                                                                        {rIdx + 1}
+                                                                        <button onClick={() => removeStockRow(rIdx)} className="absolute left-0 top-0 text-red-400 opacity-0 group-hover:opacity-100 p-0.5"><Trash2 size={10} /></button>
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0">
+                                                                        <input id={`s-${rIdx}-t`} className="input-cell bg-yellow-50" value={row.t || ''} onChange={e => handleStockChange(rIdx, 't', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 't')} />
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0">
+                                                                        <input id={`s-${rIdx}-w`} className="input-cell bg-yellow-50" value={row.w || ''} onChange={e => handleStockChange(rIdx, 'w', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'w')} />
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0">
+                                                                        <input id={`s-${rIdx}-h`} className="input-cell bg-yellow-50" value={row.h || ''} onChange={e => handleStockChange(rIdx, 'h', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'h')} />
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0">
+                                                                        <input id={`s-${rIdx}-l`} type="number" className="input-cell bg-yellow-50 font-bold" value={row.l || ''} onChange={e => handleStockChange(rIdx, 'l', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'l')} />
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border bg-yellow-50 p-0">
+                                                                        <input id={`s-${rIdx}-qty`} type="number" className="input-cell bg-yellow-50" value={row.qty || ''} onChange={e => handleStockChange(rIdx, 'qty', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'stock', 0, 'qty')} />
+                                                                    </td>
+                                                                </>
+                                                            )}
+                                                            <td className="border p-0">
+                                                                <input id={`c-${rIdx}-${cIdx}-l`} type="number" className="input-cell" value={cut.l || ''} onChange={e => handleCutChange(rIdx, cIdx, 'l', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'l')} />
+                                                            </td>
+                                                            <td className="border p-0">
+                                                                <input id={`c-${rIdx}-${cIdx}-count`} type="number" className="input-cell" value={cut.count || ''} onChange={e => handleCutChange(rIdx, cIdx, 'count', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'count')} />
+                                                            </td>
+                                                            <td className="border bg-gray-50 text-gray-500">
+                                                                {cutQty ? cutQty.toLocaleString() : ''}
+                                                            </td>
+                                                            <td className="border p-0">
+                                                                <input id={`c-${rIdx}-${cIdx}-marking`} className="input-cell text-left px-1" value={cut.marking || ''} onChange={e => handleCutChange(rIdx, cIdx, 'marking', e.target.value)} onKeyDown={(e)=>handleKeyDown(e, rIdx, 'cut', cIdx, 'marking')} />
+                                                            </td>
+                                                            {isFirst && (
+                                                                <>
+                                                                    <td rowSpan={rowSpan} className={`border font-bold ${lossPerBar >= 650 ? 'text-blue-600' : (lossPerBar < 150 ? 'text-red-500' : 'text-gray-700')}`}>
+                                                                        {isNaN(lossPerBar) ? '' : lossPerBar.toLocaleString()}
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border text-gray-600">
+                                                                        {isNaN(lossPerBar) || !row.qty ? '' : (lossPerBar * row.qty).toLocaleString()}
+                                                                    </td>
+                                                                    <td rowSpan={rowSpan} className="border"></td>
+                                                                </>
+                                                            )}
                                                         </tr>
                                                     );
                                                 })}
@@ -479,9 +641,7 @@
 
         // --- Main App ---
         function App() {
-            const [user, setUser] = useState(null);
             const [viewMode, setViewMode] = useState('input');
-            const [isFirebaseReady, setIsFirebaseReady] = useState(false);
             const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
             const [isStockModalOpen, setIsStockModalOpen] = useState(false);
             const [isCopyModalOpen, setIsCopyModalOpen] = useState(false);
@@ -510,24 +670,27 @@
                 }); 
             };
 
+            // 🚨 입력 양식 변경 시 열(Column) 맵핑 초기화 버그 해결 (State Deep Copy)
             useEffect(() => {
                 setDongData(prev => {
+                    let isChanged = false;
                     const next = { ...prev };
                     Object.keys(next).forEach(d => {
-                        if (inputMode === 'sales') {
-                            next[d].colMapping = { 1: 'width', 2: 'height', 3: 'thickness', 4: 'length', 7: 'qty', 13: 'marking' };
-                        } else {
-                            next[d].colMapping = { 2: 'width', 3: 'height', 4: 'thickness', 5: 'length', 7: 'qty', 8: 'marking' };
+                        const expectedMap = inputMode === 'sales'
+                            ? { 1: 'width', 2: 'height', 3: 'thickness', 4: 'length', 7: 'qty', 13: 'marking' }
+                            : { 2: 'width', 3: 'height', 4: 'thickness', 5: 'length', 7: 'qty', 8: 'marking' };
+                        
+                        if (!next[d].colMapping || JSON.stringify(next[d].colMapping) !== JSON.stringify(expectedMap)) {
+                            next[d] = { ...next[d], colMapping: expectedMap };
+                            isChanged = true;
                         }
                     });
-                    return next;
+                    return isChanged ? next : prev;
                 });
             }, [inputMode]);
 
             const getStockLengths = (w, h, t) => { const dims = [parseInt(w), parseInt(h)].sort((a, b) => b - a); const specKey = `${dims[0]}x${dims[1]}`; const thickStr = String(t).trim(); const settings = globalSettings; if (settings[specKey]) { if (settings[specKey][thickStr]) return settings[specKey][thickStr]; if (thickStr === '2.3' && settings[specKey]['2.1']) return settings[specKey]['2.1']; if (settings[specKey]['all']) return settings[specKey]['all']; } return settings["default"] || []; };
-            const initFirebase = async () => { if (!window.FirebaseSDK) return; try { const { initializeApp, getAuth } = window.FirebaseSDK; } catch (e) { console.warn(e); } };
-            useEffect(() => { if (window.FirebaseSDK) initFirebase(); else window.addEventListener('firebase-sdk-ready', initFirebase); return () => window.removeEventListener('firebase-sdk-ready', initFirebase); }, []);
-            const addDong = () => { const newDongName = prompt("새 동 이름을 입력하세요:"); if (newDongName && !dongs.includes(newDongName)) { setDongs([...dongs, newDongName]); setDongData(prev => ({ ...prev, [newDongName]: { rawInput: '', gridData: [], colMapping: { 1: 'width', 2: 'height', 3: 'thickness', 4: 'length', 7: 'qty', 13: 'marking' }, parsedItems: [], spec: '100*100', thickness: '2.1' } })); setCurrentDong(newDongName); } };
+            const addDong = () => { const newDongName = prompt("새 동 이름을 입력하세요:"); if (newDongName && !dongs.includes(newDongName)) { setDongs([...dongs, newDongName]); setDongData(prev => ({ ...prev, [newDongName]: { rawInput: '', gridData: [], colMapping: inputMode === 'sales' ? { 1: 'width', 2: 'height', 3: 'thickness', 4: 'length', 7: 'qty', 13: 'marking' } : { 2: 'width', 3: 'height', 4: 'thickness', 5: 'length', 7: 'qty', 8: 'marking' }, parsedItems: [], spec: '100*100', thickness: '2.1' } })); setCurrentDong(newDongName); } };
             const renameDong = (oldName) => { const newName = prompt(`'${oldName}'의 새 이름을 입력하세요:`, oldName); if (newName && newName !== oldName && !dongs.includes(newName)) { setDongs(prev => prev.map(d => d === oldName ? newName : d)); if (currentDong === oldName) setCurrentDong(newName); setDongData(prev => { const n = { ...prev }; n[newName] = n[oldName]; delete n[oldName]; return n; }); setResultsByDong(prev => { const n = { ...prev }; if (n[oldName]) { n[newName] = n[oldName]; delete n[oldName]; } return n; }); setManualData(prev => { const n = { ...prev }; n[newName] = n[oldName]; delete n[oldName]; return n; }); } };
             const deleteDong = (targetDong) => { if (dongs.length <= 1) { alert("최소 하나의 동은 있어야 합니다."); return; } if (confirm(`'${targetDong}'을 삭제하시겠습니까?`)) { const newDongs = dongs.filter(d => d !== targetDong); setDongs(newDongs); if (currentDong === targetDong) setCurrentDong(newDongs[0]); setDongData(prev => { const n = { ...prev }; delete n[targetDong]; return n; }); setResultsByDong(prev => { const n = { ...prev }; delete n[targetDong]; return n; }); setManualData(prev => { const n = { ...prev }; delete n[targetDong]; return n; }); } };
             const handlePaste = (e) => { e.preventDefault(); const text = e.clipboardData.getData('text'); const rows = text.trim().split('\n').map(row => row.split('\t')); updateCurrentData({ rawInput: text, gridData: rows }); };
